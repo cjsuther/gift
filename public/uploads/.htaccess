@@ -1,0 +1,5 @@
+# Bloquea ejecución de PHP en uploads (defensa en profundidad).
+php_flag engine off
+<FilesMatch "\.(php|phar|phtml|pl|py|jsp|asp|sh|cgi)$">
+    Require all denied
+</FilesMatch>

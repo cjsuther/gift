@@ -1,0 +1,15 @@
+/vendor/
+/node_modules/
+.env
+.env.local
+.env.*.local
+.phpunit.cache/
+.phpunit.result.cache
+.claude/
+/public/uploads/giftcards/*
+/public/uploads/establishments/*
+!/public/uploads/giftcards/.gitkeep
+!/public/uploads/establishments/.gitkeep
+.idea/
+.vscode/
+*.log

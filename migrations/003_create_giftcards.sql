@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS giftcards (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    establishment_id INT UNSIGNED NOT NULL,
+    created_by_user_id INT UNSIGNED NOT NULL,
+    redeemed_by_user_id INT UNSIGNED DEFAULT NULL,
+    token CHAR(32) NOT NULL UNIQUE,
+    title VARCHAR(150) NOT NULL,
+    description TEXT DEFAULT NULL,
+    image_path VARCHAR(255) DEFAULT NULL,
+    status ENUM('active','redeemed','expired','cancelled') NOT NULL DEFAULT 'active',
+    expires_at DATE DEFAULT NULL,
+    redeemed_at TIMESTAMP NULL DEFAULT NULL,
+    recipient_name VARCHAR(150) DEFAULT NULL,
+    recipient_contact VARCHAR(150) DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id),
+    FOREIGN KEY (redeemed_by_user_id) REFERENCES users(id),
+    INDEX idx_establishment_status (establishment_id, status),
+    INDEX idx_token (token),
+    INDEX idx_expires (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
