@@ -20,6 +20,7 @@ use App\Helpers\View;
     $navItems = $user->isSuperAdmin()
         ? [
             ['url' => '/admin/establishments', 'label' => 'Establecimientos'],
+            ['url' => '/admin/users',          'label' => 'Usuarios'],
         ]
         : [
             ['url' => '/dashboard', 'label' => 'Dashboard'],

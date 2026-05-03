@@ -135,4 +135,119 @@ class UserRepository
         );
         $stmt->execute(['id' => $id, 'eid' => $establishmentId]);
     }
+
+    // -----------------------------------------------------------------------
+    // Métodos globales para super_admin (sin tenant scope).
+    // El controller debe aplicar las reglas de negocio (no auto-desactivar,
+    // no tocar otros super_admins, etc.); el repo solo provee el acceso.
+    // -----------------------------------------------------------------------
+
+    /**
+     * Lista TODOS los usuarios del sistema con filtros opcionales.
+     * Joinea establishment para mostrar el nombre.
+     *
+     * @param array{q?:string,role?:string,establishment_id?:int|null,is_active?:int} $filters
+     * @return array<int, array<string, mixed>>
+     */
+    public function listAll(array $filters = []): array
+    {
+        $sql = 'SELECT u.id, u.role, u.establishment_id, u.name, u.email,
+                       u.is_active, u.last_login_at, u.created_at,
+                       e.name AS establishment_name
+                FROM users u
+                LEFT JOIN establishments e ON e.id = u.establishment_id
+                WHERE 1 = 1';
+        $params = [];
+
+        if (!empty($filters['q'])) {
+            $sql            .= ' AND (u.name LIKE :q OR u.email LIKE :q)';
+            $params['q']     = '%' . trim((string) $filters['q']) . '%';
+        }
+        if (!empty($filters['role'])) {
+            $sql               .= ' AND u.role = :role';
+            $params['role']     = (string) $filters['role'];
+        }
+        if (array_key_exists('establishment_id', $filters)) {
+            if ($filters['establishment_id'] === null) {
+                $sql .= ' AND u.establishment_id IS NULL';
+            } else {
+                $sql            .= ' AND u.establishment_id = :eid';
+                $params['eid']   = (int) $filters['establishment_id'];
+            }
+        }
+        if (array_key_exists('is_active', $filters) && $filters['is_active'] !== '') {
+            $sql                  .= ' AND u.is_active = :active';
+            $params['active']      = (int) $filters['is_active'];
+        }
+
+        $sql .= ' ORDER BY u.is_active DESC,
+                          FIELD(u.role, "super_admin", "establishment_admin", "establishment_user"),
+                          u.name ASC';
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    public function findAny(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT u.id, u.role, u.establishment_id, u.name, u.email,
+                    u.is_active, u.last_login_at, u.created_at,
+                    e.name AS establishment_name
+             FROM users u
+             LEFT JOIN establishments e ON e.id = u.establishment_id
+             WHERE u.id = :id LIMIT 1'
+        );
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch();
+        return $row === false ? null : $row;
+    }
+
+    /**
+     * Update sin tenant scope. Whitelist explícita de campos:
+     * NO permite cambiar `role` ni `establishment_id` (esos serían cambios
+     * de privilegio o de pertenencia con riesgos que requieren UI dedicada).
+     */
+    public function updateAny(int $id, array $data): void
+    {
+        $allowed = ['name', 'email', 'is_active', 'password'];
+        $sets    = [];
+        $params  = ['id' => $id];
+
+        foreach ($allowed as $field) {
+            if (!array_key_exists($field, $data)) {
+                continue;
+            }
+            if ($field === 'password') {
+                if ($data['password'] === null || $data['password'] === '') {
+                    continue;
+                }
+                $sets[]            = 'password_hash = :hash';
+                $params['hash']    = password_hash((string) $data['password'], PASSWORD_BCRYPT);
+                continue;
+            }
+            if ($field === 'is_active') {
+                $sets[]               = 'is_active = :is_active';
+                $params['is_active']  = (int) (bool) $data['is_active'];
+                continue;
+            }
+            $sets[]            = "{$field} = :{$field}";
+            $params[$field]    = $data[$field];
+        }
+
+        if ($sets === []) {
+            return;
+        }
+
+        $sql  = 'UPDATE users SET ' . implode(', ', $sets) . ' WHERE id = :id';
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+    }
+
+    public function deactivateAny(int $id): void
+    {
+        $stmt = $this->pdo->prepare('UPDATE users SET is_active = 0 WHERE id = :id');
+        $stmt->execute(['id' => $id]);
+    }
 }

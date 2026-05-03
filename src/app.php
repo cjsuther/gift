@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Auth\JwtService;
 use App\Auth\PdoUserRepository;
+use App\Controllers\AdminUserController;
 use App\Controllers\AuthController;
 use App\Controllers\EstablishmentController;
 use App\Controllers\UserController;
@@ -52,8 +53,9 @@ $imageService     = new ImageService(
 
 $establishmentController = new EstablishmentController($establishmentRepo, $imageService);
 
-$userTenantRepo = new UserRepository($pdo);
-$userController = new UserController($userTenantRepo);
+$userTenantRepo      = new UserRepository($pdo);
+$userController      = new UserController($userTenantRepo);
+$adminUserController = new AdminUserController($userTenantRepo);
 
 // 4) Slim app
 $app = AppFactory::create();
@@ -118,6 +120,38 @@ $app->group('/admin/establishments', function ($g) use ($view, $establishmentRep
             'user'          => $user,
             'title'         => 'Editar establecimiento',
             'establishment' => $row,
+        ]);
+    });
+})->add(new RoleMiddleware('super_admin'))->add($authWeb);
+
+// --- Super Admin: Usuarios globales (API JSON) ---
+$app->group('/api/admin/users', function ($g) use ($adminUserController) {
+    $g->get('',         [$adminUserController, 'index']);
+    $g->get('/{id}',    [$adminUserController, 'show']);
+    $g->put('/{id}',    [$adminUserController, 'update']);
+    $g->post('/{id}',   [$adminUserController, 'update']);
+    $g->delete('/{id}', [$adminUserController, 'destroy']);
+})->add(new RoleMiddleware('super_admin'))->add($authApi);
+
+// --- Super Admin: Usuarios globales (Vistas HTML) ---
+$app->group('/admin/users', function ($g) use ($view, $userTenantRepo) {
+    $g->get('', function ($req, $res) use ($view) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        return $view->withLayout($res, 'admin/users/index', 'layouts/admin', [
+            'user'  => $user,
+            'title' => 'Usuarios',
+        ]);
+    });
+    $g->get('/{id}/edit', function ($req, $res, $args) use ($view, $userTenantRepo) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        $row  = $userTenantRepo->findAny((int) $args['id']);
+        if ($row === null) {
+            return $res->withHeader('Location', '/admin/users')->withStatus(302);
+        }
+        return $view->withLayout($res, 'admin/users/form', 'layouts/admin', [
+            'user'    => $user,
+            'title'   => 'Editar usuario',
+            'editing' => $row,
         ]);
     });
 })->add(new RoleMiddleware('super_admin'))->add($authWeb);
