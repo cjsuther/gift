@@ -22,11 +22,17 @@ use App\Helpers\View;
             ['url' => '/admin/establishments', 'label' => 'Establecimientos'],
             ['url' => '/admin/users',          'label' => 'Usuarios'],
         ]
-        : [
-            ['url' => '/dashboard', 'label' => 'Dashboard'],
-            ['url' => '/users',     'label' => 'Usuarios'],
-            ['url' => '/giftcards', 'label' => 'Giftcards', 'disabled' => true],
-        ];
+        : (
+            $user->isEstablishmentAdmin()
+                ? [
+                    ['url' => '/dashboard', 'label' => 'Dashboard'],
+                    ['url' => '/giftcards', 'label' => 'Giftcards'],
+                    ['url' => '/users',     'label' => 'Usuarios'],
+                ]
+                : [
+                    ['url' => '/giftcards', 'label' => 'Giftcards'],
+                ]
+        );
     ?>
     <header class="bg-white border-b border-slate-200">
         <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">

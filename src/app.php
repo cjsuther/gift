@@ -7,6 +7,7 @@ use App\Auth\PdoUserRepository;
 use App\Controllers\AdminUserController;
 use App\Controllers\AuthController;
 use App\Controllers\EstablishmentController;
+use App\Controllers\GiftcardController;
 use App\Controllers\UserController;
 use App\Database\Connection;
 use App\Helpers\Response as ApiResponse;
@@ -15,8 +16,11 @@ use App\Middleware\AuthMiddleware;
 use App\Middleware\RoleMiddleware;
 use App\Middleware\TenantMiddleware;
 use App\Repositories\EstablishmentRepository;
+use App\Repositories\GiftcardRepository;
 use App\Repositories\UserRepository;
 use App\Services\ImageService;
+use App\Services\QrService;
+use App\Services\TokenService;
 use Dotenv\Dotenv;
 use Slim\Factory\AppFactory;
 
@@ -56,6 +60,11 @@ $establishmentController = new EstablishmentController($establishmentRepo, $imag
 $userTenantRepo      = new UserRepository($pdo);
 $userController      = new UserController($userTenantRepo);
 $adminUserController = new AdminUserController($userTenantRepo);
+
+$giftcardRepo       = new GiftcardRepository($pdo);
+$tokenService       = new TokenService();
+$qrService          = new QrService((string) $appConfig['url']);
+$giftcardController = new GiftcardController($giftcardRepo, $tokenService, $qrService, $imageService);
 
 // 4) Slim app
 $app = AppFactory::create();
@@ -210,19 +219,81 @@ $app->group('', function ($g) use ($view, $userTenantRepo) {
     ->add(new RoleMiddleware('establishment_admin'))
     ->add($authWeb);
 
-// --- Placeholders Fase 4 (giftcards tenant-scoped) ---
-$app->group('/api/giftcards', function ($g) {
-    $g->get('', function ($req, $res) {
-        $tenantId = $req->getAttribute(TenantMiddleware::REQUEST_ATTR);
-        return ApiResponse::json($res, [
-            'placeholder' => 'Fase 4',
-            'establishment_id' => $tenantId,
+// --- Giftcards: lectura compartida (admin + user del establecimiento) ---
+$app->group('/api/giftcards', function ($g) use ($giftcardController) {
+    $g->get('',         [$giftcardController, 'index']);
+    $g->get('/{id}',    [$giftcardController, 'show']);
+})
+    ->add($tenant)
+    ->add(new RoleMiddleware('establishment_admin', 'establishment_user'))
+    ->add($authApi);
+
+// --- Giftcards: mutación + QR (solo admin del establecimiento) ---
+$app->group('/api/giftcards', function ($g) use ($giftcardController) {
+    $g->post('',         [$giftcardController, 'store']);
+    $g->put('/{id}',     [$giftcardController, 'update']);
+    $g->post('/{id}',    [$giftcardController, 'update']);   // alias para multipart
+    $g->delete('/{id}',  [$giftcardController, 'destroy']);
+    $g->get('/{id}/qr',  [$giftcardController, 'qr']);
+})
+    ->add($tenant)
+    ->add(new RoleMiddleware('establishment_admin'))
+    ->add($authApi);
+
+// --- Giftcards: vistas HTML (admin + user en modo lectura) ---
+$app->group('', function ($g) use ($view, $giftcardRepo, $qrService) {
+    $g->get('/giftcards', function ($req, $res) use ($view) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        return $view->withLayout($res, 'establishment/giftcards/index', 'layouts/admin', [
+            'user'  => $user,
+            'title' => 'Giftcards',
+        ]);
+    });
+    $g->get('/giftcards/new', function ($req, $res) use ($view) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        if (!$user->isEstablishmentAdmin()) {
+            return $res->withHeader('Location', '/giftcards')->withStatus(302);
+        }
+        return $view->withLayout($res, 'establishment/giftcards/form', 'layouts/admin', [
+            'user'    => $user,
+            'title'   => 'Nueva giftcard',
+            'editing' => null,
+        ]);
+    });
+    $g->get('/giftcards/{id}', function ($req, $res, $args) use ($view, $giftcardRepo, $qrService) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        $row  = $giftcardRepo->findForTenant((int) $args['id'], (int) $user->establishmentId);
+        if ($row === null) {
+            return $res->withHeader('Location', '/giftcards')->withStatus(302);
+        }
+        return $view->withLayout($res, 'establishment/giftcards/show', 'layouts/admin', [
+            'user'       => $user,
+            'title'      => $row['title'],
+            'giftcard'   => $row,
+            'redeemUrl'  => $qrService->urlForToken((string) $row['token']),
+            'tokenShort' => \App\Services\TokenService::shortLabel((string) $row['token']),
+            'qrDataUri'  => $qrService->dataUriForToken((string) $row['token']),
+        ]);
+    });
+    $g->get('/giftcards/{id}/edit', function ($req, $res, $args) use ($view, $giftcardRepo) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        if (!$user->isEstablishmentAdmin()) {
+            return $res->withHeader('Location', '/giftcards/' . (int) $args['id'])->withStatus(302);
+        }
+        $row = $giftcardRepo->findForTenant((int) $args['id'], (int) $user->establishmentId);
+        if ($row === null) {
+            return $res->withHeader('Location', '/giftcards')->withStatus(302);
+        }
+        return $view->withLayout($res, 'establishment/giftcards/form', 'layouts/admin', [
+            'user'    => $user,
+            'title'   => 'Editar giftcard',
+            'editing' => $row,
         ]);
     });
 })
     ->add($tenant)
     ->add(new RoleMiddleware('establishment_admin', 'establishment_user'))
-    ->add($authApi);
+    ->add($authWeb);
 
 // --- Healthcheck público ---
 $app->get('/api/health', function ($req, $res) {

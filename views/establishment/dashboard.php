@@ -9,6 +9,16 @@ use App\Helpers\View;
     </div>
 
     <div class="grid sm:grid-cols-2 gap-4">
+        <a href="/giftcards" class="block bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:border-slate-400 hover:shadow-md transition">
+            <div class="flex items-start gap-4">
+                <div class="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-semibold">G</div>
+                <div>
+                    <h2 class="font-semibold text-slate-800">Giftcards</h2>
+                    <p class="text-sm text-slate-500 mt-1">Crear, editar y descargar las giftcards de tu establecimiento.</p>
+                </div>
+            </div>
+        </a>
+
         <a href="/users" class="block bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:border-slate-400 hover:shadow-md transition">
             <div class="flex items-start gap-4">
                 <div class="w-10 h-10 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-semibold">U</div>
@@ -18,24 +28,14 @@ use App\Helpers\View;
                 </div>
             </div>
         </a>
-
-        <div class="block bg-white rounded-xl shadow-sm border border-slate-200 p-5 opacity-60 cursor-not-allowed">
-            <div class="flex items-start gap-4">
-                <div class="w-10 h-10 rounded-lg bg-slate-100 text-slate-400 flex items-center justify-center font-semibold">G</div>
-                <div>
-                    <h2 class="font-semibold text-slate-700">Giftcards</h2>
-                    <p class="text-sm text-slate-500 mt-1">Próximamente — crear y administrar tus giftcards (Fase 4).</p>
-                </div>
-            </div>
-        </div>
     </div>
 
     <div class="bg-slate-50 border border-slate-200 rounded-xl p-5 text-sm text-slate-600">
         <p class="font-medium text-slate-800 mb-1">Cómo funciona</p>
         <p>
-            Por ahora podés gestionar los usuarios del establecimiento. En la próxima fase vas a poder crear giftcards
-            con QR para entregar a tus clientes. Los usuarios que des de alta acá van a poder escanearlos y marcarlos
-            como canjeados.
+            Creá giftcards con título, descripción opcional, imagen y vencimiento. Cada una genera un QR único que
+            podés descargar en PNG y compartir por WhatsApp. Los usuarios que des de alta acá van a poder escanear
+            esos QRs y marcarlos como canjeados (próxima fase).
         </p>
     </div>
 </div>

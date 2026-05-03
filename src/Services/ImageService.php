@@ -90,6 +90,61 @@ final class ImageService
         }
     }
 
+    /**
+     * Procesa la imagen de una giftcard. A diferencia del logo (cover crop),
+     * acá hacemos "fit max longest side" — se preserva la proporción y se
+     * limita el lado mayor al tamaño dado. Devuelve el path relativo bajo
+     * uploadsBasePath: giftcards/{est_id}/{token}.{ext}.
+     */
+    public function saveGiftcardImage(
+        UploadedFileInterface $file,
+        int $establishmentId,
+        string $token,
+        int $maxLongestSide = 1200,
+    ): string {
+        $this->validate($file);
+
+        $mime = $this->detectMime($file);
+        $ext  = self::EXT_MAP[$mime];
+
+        $relDir = 'giftcards/' . $establishmentId;
+        $absDir = rtrim($this->uploadsBasePath, '/') . '/' . $relDir;
+        $this->ensureDir($absDir);
+
+        $relPath = $relDir . '/' . $token . '.' . $ext;
+        $absPath = rtrim($this->uploadsBasePath, '/') . '/' . $relPath;
+
+        $stream = $file->getStream();
+        $stream->rewind();
+        $contents = $stream->getContents();
+
+        $manager = new ImageManager(new Driver());
+        $image   = $manager->read($contents);
+        $image->scaleDown($maxLongestSide, $maxLongestSide);   // preserva proporción
+        $image->save($absPath, 85);
+
+        // Si existía una versión previa con otra extensión, la borramos.
+        foreach (self::EXT_MAP as $otherExt) {
+            $other = $absDir . '/' . $token . '.' . $otherExt;
+            if ($other !== $absPath && is_file($other)) {
+                @unlink($other);
+            }
+        }
+
+        return $relPath;
+    }
+
+    public function deleteGiftcardImage(int $establishmentId, string $token): void
+    {
+        $absDir = rtrim($this->uploadsBasePath, '/') . '/giftcards/' . $establishmentId;
+        foreach (self::EXT_MAP as $ext) {
+            $file = $absDir . '/' . $token . '.' . $ext;
+            if (is_file($file)) {
+                @unlink($file);
+            }
+        }
+    }
+
     private function detectMime(UploadedFileInterface $file): string
     {
         $stream = $file->getStream();
