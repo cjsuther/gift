@@ -36,24 +36,24 @@ final class AuthMiddleware implements MiddlewareInterface
     {
         $token = $this->extractToken($request);
         if ($token === null) {
-            return $this->reject('Token no provisto.');
+            return $this->reject('Token no provisto.', $request);
         }
 
         try {
             $payload = $this->jwt->decode($token);
         } catch (\Throwable) {
-            return $this->reject('Token inválido o expirado.');
+            return $this->reject('Token inválido o expirado.', $request);
         }
 
         $user = $this->users->findActiveById($payload['sub']);
         if ($user === null) {
-            return $this->reject('Usuario no encontrado o inactivo.');
+            return $this->reject('Usuario no encontrado o inactivo.', $request);
         }
 
         // Defensa en profundidad: el rol del JWT debe coincidir con el de la DB
         // (evita usar tokens viejos si al usuario le cambiaron el rol).
         if ($user->role !== ($payload['role'] ?? null)) {
-            return $this->reject('Rol del token no coincide con el actual.');
+            return $this->reject('Rol del token no coincide con el actual.', $request);
         }
 
         $request = $request->withAttribute(self::REQUEST_ATTR, $user);
@@ -76,13 +76,34 @@ final class AuthMiddleware implements MiddlewareInterface
         return null;
     }
 
-    private function reject(string $message): ResponseInterface
+    private function reject(string $message, ServerRequestInterface $request): ResponseInterface
     {
         if ($this->redirectToLoginOnFailure) {
+            $location = '/login' . $this->buildNextQuery($request);
             return (new SlimResponse())
-                ->withHeader('Location', '/login')
+                ->withHeader('Location', $location)
                 ->withStatus(302);
         }
         return ApiResponse::unauthorized(new SlimResponse(), $message);
+    }
+
+    /**
+     * Devuelve "?next=..." con la URL original para que el form de login
+     * pueda redirigir ahí después del login. Solo path + query (sin host).
+     * Si la ruta es /login (loop) o root (/), no agrega next.
+     */
+    private function buildNextQuery(ServerRequestInterface $request): string
+    {
+        $uri  = $request->getUri();
+        $path = $uri->getPath();
+        if ($path === '' || $path === '/' || $path === '/login') {
+            return '';
+        }
+        $next = $path;
+        $qs   = $uri->getQuery();
+        if ($qs !== '') {
+            $next .= '?' . $qs;
+        }
+        return '?next=' . rawurlencode($next);
     }
 }

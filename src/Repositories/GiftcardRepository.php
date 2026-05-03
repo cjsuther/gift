@@ -213,6 +213,84 @@ class GiftcardRepository
         return true;
     }
 
+    /**
+     * Lookup por token completo de 32 hex, scoped por tenant.
+     * Devuelve null si el token no existe O no pertenece al establecimiento del usuario.
+     * Esa colapso es intencional: NO leakeamos si un token existe en otro establecimiento.
+     */
+    public function findByTokenForTenant(string $token, int $establishmentId): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT g.*, cu.name AS created_by_name, ru.name AS redeemed_by_name
+             FROM giftcards g
+             LEFT JOIN users cu ON cu.id = g.created_by_user_id
+             LEFT JOIN users ru ON ru.id = g.redeemed_by_user_id
+             WHERE g.token = :t AND g.establishment_id = :eid LIMIT 1'
+        );
+        $stmt->execute(['t' => $token, 'eid' => $establishmentId]);
+        $row = $stmt->fetch();
+        return $row === false ? null : $row;
+    }
+
+    /**
+     * Lookup por short token (8 chars). Si hay 1 sola coincidencia → devuelve el row.
+     * Si hay 0 → null. Si hay >1 → array vacío []. El controller distingue.
+     *
+     * @return array<string,mixed>|null|array{}
+     */
+    public function findByShortTokenForTenant(string $shortToken, int $establishmentId): array|null
+    {
+        $shortToken = strtolower(trim($shortToken));
+        if (preg_match('/^[a-f0-9]{4,32}$/', $shortToken) !== 1) {
+            return null;
+        }
+        $stmt = $this->pdo->prepare(
+            'SELECT id FROM giftcards
+             WHERE establishment_id = :eid AND token LIKE :prefix
+             LIMIT 5'
+        );
+        $stmt->execute([
+            'eid'    => $establishmentId,
+            'prefix' => $shortToken . '%',
+        ]);
+        $rows = $stmt->fetchAll();
+        if (count($rows) === 0) {
+            return null;
+        }
+        if (count($rows) > 1) {
+            return [];   // ambigüedad — el controller decide qué hacer
+        }
+        return $this->findForTenant((int) $rows[0]['id'], $establishmentId);
+    }
+
+    /**
+     * Marca como canjeada en una sola transacción atómica:
+     * - Solo modifica si status=active y (expires_at NULL o >= hoy).
+     * - Devuelve true si quedó canjeada en este intento.
+     * - Si otro request la canjeó al mismo tiempo, este devuelve false (rowCount=0).
+     */
+    public function redeem(int $id, int $establishmentId, int $byUserId, ?string $ip, ?string $ua): bool
+    {
+        $stmt = $this->pdo->prepare(
+            "UPDATE giftcards
+             SET status = 'redeemed', redeemed_at = NOW(), redeemed_by_user_id = :uid
+             WHERE id = :id
+               AND establishment_id = :eid
+               AND status = 'active'
+               AND (expires_at IS NULL OR expires_at >= CURDATE())"
+        );
+        $stmt->execute([
+            'id'  => $id,
+            'eid' => $establishmentId,
+            'uid' => $byUserId,
+        ]);
+        if ($stmt->rowCount() === 0) {
+            return false;
+        }
+        $this->log($id, $byUserId, 'redeemed', null, $ip, $ua);
+        return true;
+    }
+
     public function log(int $giftcardId, ?int $userId, string $action, ?string $notes = null, ?string $ip = null, ?string $ua = null): void
     {
         $stmt = $this->pdo->prepare(

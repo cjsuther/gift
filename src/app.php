@@ -8,6 +8,7 @@ use App\Controllers\AdminUserController;
 use App\Controllers\AuthController;
 use App\Controllers\EstablishmentController;
 use App\Controllers\GiftcardController;
+use App\Controllers\RedemptionController;
 use App\Controllers\UserController;
 use App\Database\Connection;
 use App\Helpers\Response as ApiResponse;
@@ -65,6 +66,8 @@ $giftcardRepo       = new GiftcardRepository($pdo);
 $tokenService       = new TokenService();
 $qrService          = new QrService((string) $appConfig['url']);
 $giftcardController = new GiftcardController($giftcardRepo, $tokenService, $qrService, $imageService);
+
+$redemptionController = new RedemptionController($giftcardRepo);
 
 // 4) Slim app
 $app = AppFactory::create();
@@ -288,6 +291,43 @@ $app->group('', function ($g) use ($view, $giftcardRepo, $qrService) {
             'user'    => $user,
             'title'   => 'Editar giftcard',
             'editing' => $row,
+        ]);
+    });
+})
+    ->add($tenant)
+    ->add(new RoleMiddleware('establishment_admin', 'establishment_user'))
+    ->add($authWeb);
+
+// --- Canje (API) ---
+$app->group('/api/redeem', function ($g) use ($redemptionController) {
+    $g->get('/lookup',    [$redemptionController, 'lookupShort']);
+    $g->post('/{token}',  [$redemptionController, 'redeem']);
+})
+    ->add($tenant)
+    ->add(new RoleMiddleware('establishment_admin', 'establishment_user'))
+    ->add($authApi);
+
+// --- Canje (Vistas HTML) ---
+$app->group('', function ($g) use ($view, $giftcardRepo) {
+    $g->get('/scan', function ($req, $res) use ($view) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        return $view->withLayout($res, 'establishment/scan', 'layouts/admin', [
+            'user'  => $user,
+            'title' => 'Escanear',
+        ]);
+    });
+    $g->get('/redeem/{token}', function ($req, $res, $args) use ($view, $giftcardRepo) {
+        $user  = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        $token = (string) $args['token'];
+        $row   = preg_match('/^[a-f0-9]{32}$/', $token) === 1
+            ? $giftcardRepo->findByTokenForTenant($token, (int) $user->establishmentId)
+            : null;
+        return $view->withLayout($res, 'establishment/redeem/show', 'layouts/admin', [
+            'user'                => $user,
+            'title'               => $row['title'] ?? 'Canje',
+            'giftcard'            => $row,
+            'token'               => $token,
+            'crossTenantMessage'  => null,
         ]);
     });
 })

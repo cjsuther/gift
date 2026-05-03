@@ -78,7 +78,16 @@
                         }
                         localStorage.setItem('auth_token', data.token);
                         document.cookie = `auth_token=${data.token}; Path=/; SameSite=Lax`;
-                        // Redirección por rol (ajustar cuando existan las vistas)
+
+                        // Si vino con ?next=/algo, ir ahí (post-scan QR, deep link, etc.)
+                        const params = new URLSearchParams(window.location.search);
+                        const next   = params.get('next');
+                        if (next && next.startsWith('/') && !next.startsWith('//')) {
+                            window.location.href = next;
+                            return;
+                        }
+
+                        // Si no, redirigir según rol
                         const role = data.user.role;
                         if (role === 'super_admin')               window.location.href = '/admin/establishments';
                         else if (role === 'establishment_admin')  window.location.href = '/dashboard';

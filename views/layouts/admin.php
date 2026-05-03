@@ -27,9 +27,11 @@ use App\Helpers\View;
                 ? [
                     ['url' => '/dashboard', 'label' => 'Dashboard'],
                     ['url' => '/giftcards', 'label' => 'Giftcards'],
+                    ['url' => '/scan',      'label' => 'Escanear'],
                     ['url' => '/users',     'label' => 'Usuarios'],
                 ]
                 : [
+                    ['url' => '/scan',      'label' => 'Escanear'],
                     ['url' => '/giftcards', 'label' => 'Giftcards'],
                 ]
         );
