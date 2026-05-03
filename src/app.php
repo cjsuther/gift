@@ -6,6 +6,7 @@ use App\Auth\JwtService;
 use App\Auth\PdoUserRepository;
 use App\Controllers\AdminUserController;
 use App\Controllers\AuthController;
+use App\Controllers\DashboardController;
 use App\Controllers\EstablishmentController;
 use App\Controllers\GiftcardController;
 use App\Controllers\RedemptionController;
@@ -68,6 +69,7 @@ $qrService          = new QrService((string) $appConfig['url']);
 $giftcardController = new GiftcardController($giftcardRepo, $tokenService, $qrService, $imageService);
 
 $redemptionController = new RedemptionController($giftcardRepo);
+$dashboardController  = new DashboardController($giftcardRepo);
 
 // 4) Slim app
 $app = AppFactory::create();
@@ -244,7 +246,7 @@ $app->group('/api/giftcards', function ($g) use ($giftcardController) {
     ->add($authApi);
 
 // --- Giftcards: vistas HTML (admin + user en modo lectura) ---
-$app->group('', function ($g) use ($view, $giftcardRepo, $qrService) {
+$app->group('', function ($g) use ($view, $giftcardRepo, $qrService, $establishmentRepo) {
     $g->get('/giftcards', function ($req, $res) use ($view) {
         $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
         return $view->withLayout($res, 'establishment/giftcards/index', 'layouts/admin', [
@@ -278,6 +280,30 @@ $app->group('', function ($g) use ($view, $giftcardRepo, $qrService) {
             'qrDataUri'  => $qrService->dataUriForToken((string) $row['token']),
         ]);
     });
+    $g->get('/giftcards/{id}/print', function ($req, $res, $args) use ($view, $giftcardRepo, $qrService, $establishmentRepo) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        $row  = $giftcardRepo->findForTenant((int) $args['id'], (int) $user->establishmentId);
+        if ($row === null) {
+            return $res->withHeader('Location', '/giftcards')->withStatus(302);
+        }
+        $est = $establishmentRepo->find((int) $user->establishmentId);
+        if ($est === null) {
+            return $res->withHeader('Location', '/giftcards')->withStatus(302);
+        }
+        // No usamos layout — la vista de print es standalone con su propio HTML.
+        $html = (new \App\Helpers\View(__DIR__ . '/../views'))->render(
+            $res,
+            'establishment/giftcards/print',
+            [
+                'giftcard'      => $row,
+                'establishment' => $est,
+                'qrDataUri'     => $qrService->dataUriForToken((string) $row['token']),
+                'tokenShort'    => \App\Services\TokenService::shortLabel((string) $row['token']),
+                'redeemUrl'     => $qrService->urlForToken((string) $row['token']),
+            ]
+        );
+        return $html;
+    });
     $g->get('/giftcards/{id}/edit', function ($req, $res, $args) use ($view, $giftcardRepo) {
         $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
         if (!$user->isEstablishmentAdmin()) {
@@ -297,6 +323,14 @@ $app->group('', function ($g) use ($view, $giftcardRepo, $qrService) {
     ->add($tenant)
     ->add(new RoleMiddleware('establishment_admin', 'establishment_user'))
     ->add($authWeb);
+
+// --- Dashboard (API) — solo establishment_admin ---
+$app->group('/api/dashboard', function ($g) use ($dashboardController) {
+    $g->get('/stats', [$dashboardController, 'stats']);
+})
+    ->add($tenant)
+    ->add(new RoleMiddleware('establishment_admin'))
+    ->add($authApi);
 
 // --- Canje (API) ---
 $app->group('/api/redeem', function ($g) use ($redemptionController) {

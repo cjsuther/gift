@@ -291,6 +291,86 @@ class GiftcardRepository
         return true;
     }
 
+    /**
+     * KPIs del establecimiento para el dashboard.
+     *
+     * @return array{
+     *   counts: array<string,int>,
+     *   redeemed_this_month: int,
+     *   created_this_month: int,
+     *   redemption_rate: float
+     * }
+     */
+    public function statsForTenant(int $establishmentId): array
+    {
+        $counts = $this->countsByStatus($establishmentId);
+
+        $stmt = $this->pdo->prepare(
+            "SELECT
+                SUM(status = 'redeemed' AND redeemed_at >= :first_of_month)        AS redeemed_this_month,
+                SUM(created_at >= :first_of_month)                                  AS created_this_month
+             FROM giftcards
+             WHERE establishment_id = :eid"
+        );
+        $stmt->execute([
+            'eid'             => $establishmentId,
+            'first_of_month'  => date('Y-m-01 00:00:00'),
+        ]);
+        $row = $stmt->fetch();
+
+        $totalIssued     = (int) $counts['total'];
+        $totalRedeemed   = (int) $counts['redeemed'];
+        $redemptionRate  = $totalIssued > 0 ? round(($totalRedeemed / $totalIssued) * 100, 1) : 0.0;
+
+        return [
+            'counts'              => $counts,
+            'redeemed_this_month' => (int) ($row['redeemed_this_month'] ?? 0),
+            'created_this_month'  => (int) ($row['created_this_month'] ?? 0),
+            'redemption_rate'     => $redemptionRate,
+        ];
+    }
+
+    /**
+     * Últimas N giftcards creadas para mostrar en el dashboard.
+     * @return array<int,array<string,mixed>>
+     */
+    public function recentCreatedForTenant(int $establishmentId, int $limit = 5): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT g.id, g.token, g.title, g.image_path, g.status, g.created_at,
+                    g.recipient_name
+             FROM giftcards g
+             WHERE g.establishment_id = :eid
+             ORDER BY g.created_at DESC
+             LIMIT :limit'
+        );
+        $stmt->bindValue('eid', $establishmentId, PDO::PARAM_INT);
+        $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Últimas N canjeadas para mostrar en el dashboard.
+     * @return array<int,array<string,mixed>>
+     */
+    public function recentRedeemedForTenant(int $establishmentId, int $limit = 5): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT g.id, g.token, g.title, g.image_path, g.redeemed_at, g.recipient_name,
+                    ru.name AS redeemed_by_name
+             FROM giftcards g
+             LEFT JOIN users ru ON ru.id = g.redeemed_by_user_id
+             WHERE g.establishment_id = :eid AND g.status = 'redeemed'
+             ORDER BY g.redeemed_at DESC
+             LIMIT :limit"
+        );
+        $stmt->bindValue('eid', $establishmentId, PDO::PARAM_INT);
+        $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
     public function log(int $giftcardId, ?int $userId, string $action, ?string $notes = null, ?string $ip = null, ?string $ua = null): void
     {
         $stmt = $this->pdo->prepare(
