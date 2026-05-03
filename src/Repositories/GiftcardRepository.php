@@ -305,16 +305,20 @@ class GiftcardRepository
     {
         $counts = $this->countsByStatus($establishmentId);
 
+        // Nota: PDO con EMULATE_PREPARES=false no permite reusar el mismo
+        // placeholder named, por eso usamos :fom1 y :fom2.
         $stmt = $this->pdo->prepare(
             "SELECT
-                SUM(status = 'redeemed' AND redeemed_at >= :first_of_month)        AS redeemed_this_month,
-                SUM(created_at >= :first_of_month)                                  AS created_this_month
+                SUM(status = 'redeemed' AND redeemed_at >= :fom1)  AS redeemed_this_month,
+                SUM(created_at >= :fom2)                            AS created_this_month
              FROM giftcards
              WHERE establishment_id = :eid"
         );
+        $firstOfMonth = date('Y-m-01 00:00:00');
         $stmt->execute([
-            'eid'             => $establishmentId,
-            'first_of_month'  => date('Y-m-01 00:00:00'),
+            'eid'  => $establishmentId,
+            'fom1' => $firstOfMonth,
+            'fom2' => $firstOfMonth,
         ]);
         $row = $stmt->fetch();
 
