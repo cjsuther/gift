@@ -5,11 +5,15 @@ declare(strict_types=1);
 use App\Auth\JwtService;
 use App\Auth\PdoUserRepository;
 use App\Controllers\AuthController;
+use App\Controllers\EstablishmentController;
 use App\Database\Connection;
 use App\Helpers\Response as ApiResponse;
+use App\Helpers\View;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\RoleMiddleware;
 use App\Middleware\TenantMiddleware;
+use App\Repositories\EstablishmentRepository;
+use App\Services\ImageService;
 use Dotenv\Dotenv;
 use Slim\Factory\AppFactory;
 
@@ -31,6 +35,21 @@ $jwtService     = new JwtService(
     algo:      (string) $appConfig['jwt']['algo'],
 );
 
+$view              = new View(__DIR__ . '/../views');
+$establishmentRepo = new EstablishmentRepository($pdo);
+
+// El uploadPath puede venir relativo (público al repo) o absoluto.
+$uploadConfigured = (string) $appConfig['upload']['path'];
+$uploadAbs        = str_starts_with($uploadConfigured, '/')
+    ? $uploadConfigured
+    : __DIR__ . '/../' . $uploadConfigured;
+$imageService     = new ImageService(
+    uploadsBasePath: $uploadAbs,
+    maxBytes:        ((int) $appConfig['upload']['max_mb']) * 1024 * 1024,
+);
+
+$establishmentController = new EstablishmentController($establishmentRepo, $imageService);
+
 // 4) Slim app
 $app = AppFactory::create();
 $app->addBodyParsingMiddleware();
@@ -38,8 +57,9 @@ $app->addRoutingMiddleware();
 $app->addErrorMiddleware($appConfig['debug'], true, true);
 
 // 5) Middlewares reutilizables
-$auth   = new AuthMiddleware($jwtService, $userRepository);
-$tenant = new TenantMiddleware();
+$authApi = new AuthMiddleware($jwtService, $userRepository);                 // 401 JSON
+$authWeb = new AuthMiddleware($jwtService, $userRepository, true);           // redirect a /login
+$tenant  = new TenantMiddleware();
 
 // 6) Rutas
 //
@@ -47,23 +67,57 @@ $tenant = new TenantMiddleware();
 // Slim ejecuta los middlewares de ruta en orden INVERSO al que se agregan
 // con ->add(), por eso se agregan al revés (último ->add se ejecuta primero).
 
+// --- Auth ---
 $app->post('/api/auth/login', [new AuthController($userRepository, $jwtService), 'login']);
 
 $app->group('/api/auth', function ($g) use ($userRepository, $jwtService) {
     $controller = new AuthController($userRepository, $jwtService);
     $g->get('/me',      [$controller, 'me']);
     $g->post('/logout', [$controller, 'logout']);
-})->add($auth);
+})->add($authApi);
 
-// Ejemplo: rutas exclusivas de super_admin (Fase 2 las completará)
-$app->group('/api/admin', function ($g) {
-    $g->get('/establishments', function ($req, $res) {
-        return ApiResponse::json($res, ['placeholder' => 'Fase 2']);
+// --- Super Admin: Establecimientos (API JSON) ---
+$app->group('/api/admin/establishments', function ($g) use ($establishmentController) {
+    $g->get('',        [$establishmentController, 'index']);
+    $g->post('',       [$establishmentController, 'store']);
+    $g->get('/{id}',   [$establishmentController, 'show']);
+    $g->put('/{id}',   [$establishmentController, 'update']);
+    $g->post('/{id}',  [$establishmentController, 'update']);   // alias para multipart desde el browser
+    $g->delete('/{id}',[$establishmentController, 'destroy']);
+})->add(new RoleMiddleware('super_admin'))->add($authApi);
+
+// --- Super Admin: Establecimientos (Vistas HTML) ---
+$app->group('/admin/establishments', function ($g) use ($view, $establishmentRepo) {
+    $g->get('', function ($req, $res) use ($view) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        return $view->withLayout($res, 'admin/establishments/index', 'layouts/admin', [
+            'user'  => $user,
+            'title' => 'Establecimientos',
+        ]);
     });
-})->add(new RoleMiddleware('super_admin'))->add($auth);
+    $g->get('/new', function ($req, $res) use ($view) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        return $view->withLayout($res, 'admin/establishments/form', 'layouts/admin', [
+            'user'          => $user,
+            'title'         => 'Nuevo establecimiento',
+            'establishment' => null,
+        ]);
+    });
+    $g->get('/{id}/edit', function ($req, $res, $args) use ($view, $establishmentRepo) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        $row  = $establishmentRepo->find((int) $args['id']);
+        if ($row === null) {
+            return $res->withHeader('Location', '/admin/establishments')->withStatus(302);
+        }
+        return $view->withLayout($res, 'admin/establishments/form', 'layouts/admin', [
+            'user'          => $user,
+            'title'         => 'Editar establecimiento',
+            'establishment' => $row,
+        ]);
+    });
+})->add(new RoleMiddleware('super_admin'))->add($authWeb);
 
-// Ejemplo: rutas tenant-scoped (admin o user del establecimiento)
-// AuthMiddleware → RoleMiddleware → TenantMiddleware → handler
+// --- Placeholders Fase 4 (giftcards tenant-scoped) ---
 $app->group('/api/giftcards', function ($g) {
     $g->get('', function ($req, $res) {
         $tenantId = $req->getAttribute(TenantMiddleware::REQUEST_ATTR);
@@ -75,14 +129,14 @@ $app->group('/api/giftcards', function ($g) {
 })
     ->add($tenant)
     ->add(new RoleMiddleware('establishment_admin', 'establishment_user'))
-    ->add($auth);
+    ->add($authApi);
 
-// Healthcheck público
+// --- Healthcheck público ---
 $app->get('/api/health', function ($req, $res) {
     return ApiResponse::json($res, ['status' => 'ok', 'time' => date(DATE_ATOM)]);
 });
 
-// Vista de login (HTML)
+// --- Vista de login (HTML, pública) ---
 $app->get('/login', function ($req, $res) {
     $html = file_get_contents(__DIR__ . '/../views/auth/login.php');
     $res->getBody()->write($html === false ? 'Vista no encontrada' : $html);

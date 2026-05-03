@@ -28,6 +28,7 @@ final class AuthMiddleware implements MiddlewareInterface
     public function __construct(
         private readonly JwtService $jwt,
         private readonly UserProvider $users,
+        private readonly bool $redirectToLoginOnFailure = false,
     ) {
     }
 
@@ -77,6 +78,11 @@ final class AuthMiddleware implements MiddlewareInterface
 
     private function reject(string $message): ResponseInterface
     {
+        if ($this->redirectToLoginOnFailure) {
+            return (new SlimResponse())
+                ->withHeader('Location', '/login')
+                ->withStatus(302);
+        }
         return ApiResponse::unauthorized(new SlimResponse(), $message);
     }
 }
