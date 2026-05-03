@@ -6,6 +6,7 @@ use App\Auth\JwtService;
 use App\Auth\PdoUserRepository;
 use App\Controllers\AuthController;
 use App\Controllers\EstablishmentController;
+use App\Controllers\UserController;
 use App\Database\Connection;
 use App\Helpers\Response as ApiResponse;
 use App\Helpers\View;
@@ -13,6 +14,7 @@ use App\Middleware\AuthMiddleware;
 use App\Middleware\RoleMiddleware;
 use App\Middleware\TenantMiddleware;
 use App\Repositories\EstablishmentRepository;
+use App\Repositories\UserRepository;
 use App\Services\ImageService;
 use Dotenv\Dotenv;
 use Slim\Factory\AppFactory;
@@ -49,6 +51,9 @@ $imageService     = new ImageService(
 );
 
 $establishmentController = new EstablishmentController($establishmentRepo, $imageService);
+
+$userTenantRepo = new UserRepository($pdo);
+$userController = new UserController($userTenantRepo);
 
 // 4) Slim app
 $app = AppFactory::create();
@@ -116,6 +121,60 @@ $app->group('/admin/establishments', function ($g) use ($view, $establishmentRep
         ]);
     });
 })->add(new RoleMiddleware('super_admin'))->add($authWeb);
+
+// --- Establishment Admin: Usuarios (API JSON) ---
+$app->group('/api/users', function ($g) use ($userController) {
+    $g->get('',         [$userController, 'index']);
+    $g->post('',        [$userController, 'store']);
+    $g->get('/{id}',    [$userController, 'show']);
+    $g->put('/{id}',    [$userController, 'update']);
+    $g->post('/{id}',   [$userController, 'update']);   // alias para clientes que no manden PUT
+    $g->delete('/{id}', [$userController, 'destroy']);
+})
+    ->add($tenant)
+    ->add(new RoleMiddleware('establishment_admin'))
+    ->add($authApi);
+
+// --- Establishment Admin: Vistas HTML (Dashboard + Usuarios) ---
+$app->group('', function ($g) use ($view, $userTenantRepo) {
+    $g->get('/dashboard', function ($req, $res) use ($view) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        return $view->withLayout($res, 'establishment/dashboard', 'layouts/admin', [
+            'user'  => $user,
+            'title' => 'Dashboard',
+        ]);
+    });
+    $g->get('/users', function ($req, $res) use ($view) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        return $view->withLayout($res, 'establishment/users/index', 'layouts/admin', [
+            'user'  => $user,
+            'title' => 'Usuarios',
+        ]);
+    });
+    $g->get('/users/new', function ($req, $res) use ($view) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        return $view->withLayout($res, 'establishment/users/form', 'layouts/admin', [
+            'user'    => $user,
+            'title'   => 'Nuevo usuario',
+            'editing' => null,
+        ]);
+    });
+    $g->get('/users/{id}/edit', function ($req, $res, $args) use ($view, $userTenantRepo) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        $row  = $userTenantRepo->findForTenant((int) $args['id'], (int) $user->establishmentId);
+        if ($row === null) {
+            return $res->withHeader('Location', '/users')->withStatus(302);
+        }
+        return $view->withLayout($res, 'establishment/users/form', 'layouts/admin', [
+            'user'    => $user,
+            'title'   => 'Editar usuario',
+            'editing' => $row,
+        ]);
+    });
+})
+    ->add($tenant)
+    ->add(new RoleMiddleware('establishment_admin'))
+    ->add($authWeb);
 
 // --- Placeholders Fase 4 (giftcards tenant-scoped) ---
 $app->group('/api/giftcards', function ($g) {
