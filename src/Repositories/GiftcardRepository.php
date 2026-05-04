@@ -233,6 +233,32 @@ class GiftcardRepository
     }
 
     /**
+     * Lookup PÚBLICO por token, SIN tenant scope. Incluye datos del establecimiento
+     * para que la vista pública pueda mostrar branding (nombre, color primario, logo).
+     *
+     * Trade-off de seguridad: anyone con la URL del QR puede ver imagen/título/desc.
+     * Es lo esperado: el QR está diseñado para ser presentado al cliente. El token
+     * es el secreto (32 hex random). Lo que sigue protegido es el ACTO de canjear.
+     */
+    public function findByTokenAny(string $token): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT g.*, cu.name AS created_by_name, ru.name AS redeemed_by_name,
+                    e.name AS establishment_name, e.address AS establishment_address,
+                    e.phone AS establishment_phone, e.logo_path AS establishment_logo_path,
+                    e.primary_color AS establishment_primary_color
+             FROM giftcards g
+             LEFT JOIN users cu ON cu.id = g.created_by_user_id
+             LEFT JOIN users ru ON ru.id = g.redeemed_by_user_id
+             LEFT JOIN establishments e ON e.id = g.establishment_id
+             WHERE g.token = :t LIMIT 1'
+        );
+        $stmt->execute(['t' => $token]);
+        $row = $stmt->fetch();
+        return $row === false ? null : $row;
+    }
+
+    /**
      * Lookup por short token (8 chars). Si hay 1 sola coincidencia → devuelve el row.
      * Si hay 0 → null. Si hay >1 → array vacío []. El controller distingue.
      *

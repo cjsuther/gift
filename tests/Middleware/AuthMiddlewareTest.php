@@ -111,4 +111,51 @@ final class AuthMiddlewareTest extends TestCase
 
         $this->assertSame(401, $res->getStatusCode());
     }
+
+    // -----------------------------------------------------------------
+    // Modo optional: si no hay JWT (o es inválido), continúa sin user.
+    // El handler decide qué hacer (típicamente: rutas públicas con
+    // funcionalidad enriquecida si hay user, pero accesibles sin él).
+    // -----------------------------------------------------------------
+
+    public function test_optional_continua_sin_user_si_no_hay_token(): void
+    {
+        $optionalMw = new AuthMiddleware($this->jwt, $this->users, false, true);
+
+        $req = TestRequest::create();
+        $res = $optionalMw->process($req, $this->next);
+
+        $this->assertSame(200, $res->getStatusCode());
+        $this->assertTrue($this->next->wasCalled);
+        $this->assertNull($this->next->lastRequest?->getAttribute(AuthMiddleware::REQUEST_ATTR));
+    }
+
+    public function test_optional_continua_sin_user_si_el_token_es_invalido(): void
+    {
+        $optionalMw = new AuthMiddleware($this->jwt, $this->users, false, true);
+
+        $req = TestRequest::create('GET', '/', ['Authorization' => 'Bearer not-a-jwt']);
+        $res = $optionalMw->process($req, $this->next);
+
+        $this->assertSame(200, $res->getStatusCode());
+        $this->assertTrue($this->next->wasCalled);
+        $this->assertNull($this->next->lastRequest?->getAttribute(AuthMiddleware::REQUEST_ATTR));
+    }
+
+    public function test_optional_inyecta_user_si_el_token_es_valido(): void
+    {
+        $user = new AuthenticatedUser(11, 'establishment_admin', 4, 'a@x.com', 'Admin');
+        $this->users->add($user);
+        $optionalMw = new AuthMiddleware($this->jwt, $this->users, false, true);
+
+        $token = $this->jwt->issue(11, 'establishment_admin', 4);
+        $req   = TestRequest::create('GET', '/', ['Authorization' => "Bearer {$token}"]);
+        $res   = $optionalMw->process($req, $this->next);
+
+        $this->assertSame(200, $res->getStatusCode());
+        $this->assertTrue($this->next->wasCalled);
+        $injected = $this->next->lastRequest?->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        $this->assertInstanceOf(AuthenticatedUser::class, $injected);
+        $this->assertSame(11, $injected->id);
+    }
 }

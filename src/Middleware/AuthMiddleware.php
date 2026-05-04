@@ -29,6 +29,7 @@ final class AuthMiddleware implements MiddlewareInterface
         private readonly JwtService $jwt,
         private readonly UserProvider $users,
         private readonly bool $redirectToLoginOnFailure = false,
+        private readonly bool $optional = false,
     ) {
     }
 
@@ -36,24 +37,24 @@ final class AuthMiddleware implements MiddlewareInterface
     {
         $token = $this->extractToken($request);
         if ($token === null) {
-            return $this->reject('Token no provisto.', $request);
+            return $this->fail('Token no provisto.', $request, $handler);
         }
 
         try {
             $payload = $this->jwt->decode($token);
         } catch (\Throwable) {
-            return $this->reject('Token inválido o expirado.', $request);
+            return $this->fail('Token inválido o expirado.', $request, $handler);
         }
 
         $user = $this->users->findActiveById($payload['sub']);
         if ($user === null) {
-            return $this->reject('Usuario no encontrado o inactivo.', $request);
+            return $this->fail('Usuario no encontrado o inactivo.', $request, $handler);
         }
 
         // Defensa en profundidad: el rol del JWT debe coincidir con el de la DB
         // (evita usar tokens viejos si al usuario le cambiaron el rol).
         if ($user->role !== ($payload['role'] ?? null)) {
-            return $this->reject('Rol del token no coincide con el actual.', $request);
+            return $this->fail('Rol del token no coincide con el actual.', $request, $handler);
         }
 
         $request = $request->withAttribute(self::REQUEST_ATTR, $user);
@@ -76,8 +77,17 @@ final class AuthMiddleware implements MiddlewareInterface
         return null;
     }
 
-    private function reject(string $message, ServerRequestInterface $request): ResponseInterface
+    /**
+     * Decide qué hacer cuando la autenticación falla:
+     *  - Si optional=true: continúa sin user inyectado (handler decide qué hacer).
+     *  - Si redirectToLoginOnFailure=true: 302 a /login?next=URL-original.
+     *  - Default: 401 JSON.
+     */
+    private function fail(string $message, ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
+        if ($this->optional) {
+            return $handler->handle($request);
+        }
         if ($this->redirectToLoginOnFailure) {
             $location = '/login' . $this->buildNextQuery($request);
             return (new SlimResponse())

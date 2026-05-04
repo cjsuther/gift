@@ -357,33 +357,59 @@ $app->group('/api/redeem', function ($g) use ($redemptionController) {
     ->add(new RoleMiddleware('establishment_admin', 'establishment_user'))
     ->add($authApi);
 
-// --- Canje (Vistas HTML) ---
-$app->group('', function ($g) use ($view, $giftcardRepo) {
-    $g->get('/scan', function ($req, $res) use ($view) {
-        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
-        return $view->withLayout($res, 'establishment/scan', 'layouts/admin', [
-            'user'  => $user,
-            'title' => 'Escanear',
-        ]);
-    });
-    $g->get('/redeem/{token}', function ($req, $res, $args) use ($view, $giftcardRepo) {
-        $user  = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
-        $token = (string) $args['token'];
-        $row   = preg_match('/^[a-f0-9]{32}$/', $token) === 1
-            ? $giftcardRepo->findByTokenForTenant($token, (int) $user->establishmentId)
-            : null;
-        return $view->withLayout($res, 'establishment/redeem/show', 'layouts/admin', [
-            'user'                => $user,
-            'title'               => $row['title'] ?? 'Canje',
-            'giftcard'            => $row,
-            'token'               => $token,
-            'crossTenantMessage'  => null,
-        ]);
-    });
+// --- /scan: vista interna (requiere ser admin/user del establecimiento) ---
+$app->get('/scan', function ($req, $res) use ($view) {
+    $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+    return $view->withLayout($res, 'establishment/scan', 'layouts/admin', [
+        'user'  => $user,
+        'title' => 'Escanear',
+    ]);
 })
     ->add($tenant)
     ->add(new RoleMiddleware('establishment_admin', 'establishment_user'))
     ->add($authWeb);
+
+// --- /redeem/{token}: PÚBLICO con auth opcional ---
+//
+// Cualquiera con la URL del QR puede ver el preview de la giftcard.
+// El botón "Marcar como canjeada" solo aparece si el user logueado pertenece
+// al establishment dueño de la giftcard.
+//
+// La API POST /api/redeem/{token} sigue protegida (canje requiere auth + tenant).
+$authOptional = new AuthMiddleware($jwtService, $userRepository, redirectToLoginOnFailure: false, optional: true);
+
+$app->get('/redeem/{token}', function ($req, $res, $args) use ($view, $giftcardRepo) {
+    $user  = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);   // null si no logueado
+    $token = (string) $args['token'];
+
+    $row = preg_match('/^[a-f0-9]{32}$/', $token) === 1
+        ? $giftcardRepo->findByTokenAny($token)
+        : null;
+
+    // canRedeem: hay que estar logueado, ser del mismo establecimiento,
+    // y tener rol que pueda canjear (admin o user, NO super_admin).
+    $canRedeem = false;
+    $crossTenant = false;
+    if ($user !== null && $row !== null) {
+        $isSameTenant = $user->establishmentId !== null
+            && $user->establishmentId === (int) $row['establishment_id'];
+        $isOperator = $user->isEstablishmentAdmin() || $user->isEstablishmentUser();
+        $canRedeem  = $isSameTenant && $isOperator;
+        $crossTenant = !$canRedeem;
+    }
+
+    // Layout dinámico: admin si está logueado, public si no.
+    $layout = $user !== null ? 'layouts/admin' : 'layouts/public';
+
+    return $view->withLayout($res, 'establishment/redeem/show', $layout, [
+        'user'        => $user,
+        'title'       => $row['title'] ?? 'Canje',
+        'giftcard'    => $row,
+        'token'       => $token,
+        'canRedeem'   => $canRedeem,
+        'crossTenant' => $crossTenant,
+    ]);
+})->add($authOptional);
 
 // --- Healthcheck público ---
 $app->get('/api/health', function ($req, $res) {
