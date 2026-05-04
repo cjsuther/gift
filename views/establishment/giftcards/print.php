@@ -18,7 +18,7 @@ $primaryColor = $establishment['primary_color'] ?? '#111827';
 
         @page {
             size: A6 portrait;
-            margin: 8mm;
+            margin: 0;
         }
 
         body {
@@ -77,12 +77,21 @@ $primaryColor = $establishment['primary_color'] ?? '#111827';
         .card-footer strong { color: #0f172a; }
 
         @media print {
-            body { background: white; }
+            body { background: white; margin: 0; padding: 0; }
             .toolbar { display: none; }
             .card-frame {
-                margin: 0; width: 100%; min-height: auto;
-                border: none; border-radius: 0; box-shadow: none;
+                /* Mantener el tamaño físico A6 al imprimir.
+                   Si el papel cargado es A4, la tarjeta queda en la esquina
+                   pero con tamaño correcto. */
+                margin: 0;
+                width: 105mm;
+                height: 148mm;
+                min-height: 148mm;
+                border: none;
+                border-radius: 0;
+                box-shadow: none;
                 page-break-inside: avoid;
+                page-break-after: avoid;
             }
         }
     </style>
