@@ -6,9 +6,11 @@ namespace App\Controllers;
 
 use App\Auth\AuthenticatedUser;
 use App\Helpers\Response as ApiResponse;
+use App\Helpers\View;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\TenantMiddleware;
 use App\Repositories\GiftcardRepository;
+use App\Services\MailService;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -22,8 +24,12 @@ use Psr\Http\Message\ServerRequestInterface;
  */
 final class RedemptionController
 {
-    public function __construct(private readonly GiftcardRepository $repo)
-    {
+    public function __construct(
+        private readonly GiftcardRepository $repo,
+        private readonly ?MailService $mail = null,
+        private readonly ?View $view = null,
+        private readonly string $appUrl = '',
+    ) {
     }
 
     /**
@@ -78,10 +84,55 @@ final class RedemptionController
             );
         }
 
+        $latest = $this->repo->findByTokenForTenant($token, $tenant);
+
+        // Notificar al sender por email (best-effort, no rompe el canje si falla)
+        $this->notifySenderIfPossible($latest);
+
         return ApiResponse::json($response, [
             'ok'       => true,
-            'giftcard' => $this->repo->findByTokenForTenant($token, $tenant),
+            'giftcard' => $latest,
         ]);
+    }
+
+    /**
+     * Si el sender_email está cargado y el SMTP configurado, envía el email
+     * de notificación. Cualquier error se loguea pero no afecta al canje.
+     */
+    private function notifySenderIfPossible(?array $giftcard): void
+    {
+        if ($giftcard === null || empty($giftcard['sender_email'])) {
+            return;
+        }
+        if ($this->mail === null || !$this->mail->isConfigured() || $this->view === null) {
+            return;
+        }
+
+        // Necesitamos también datos del establecimiento (nombre, color) para el email.
+        // findByTokenForTenant no los devuelve; usamos findByTokenAny que sí.
+        $full = $this->repo->findByTokenAny((string) $giftcard['token']);
+        if ($full === null) {
+            return;
+        }
+
+        try {
+            $html = $this->view->renderToString('emails/redemption_notification', [
+                'giftcard' => $full,
+                'appUrl'   => $this->appUrl,
+            ]);
+
+            $recipientLabel = !empty($full['recipient_name']) ? $full['recipient_name'] : 'tu destinatario';
+            $subject = "✓ Tu giftcard para {$recipientLabel} fue canjeada";
+
+            $this->mail->send(
+                (string) $full['sender_email'],
+                (string) ($full['sender_name'] ?? ''),
+                $subject,
+                $html,
+            );
+        } catch (\Throwable $e) {
+            error_log('[RedemptionController] Falló notificar sender: ' . $e->getMessage());
+        }
     }
 
     /**

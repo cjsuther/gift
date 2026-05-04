@@ -73,6 +73,12 @@ $isLoggedIn = $user !== null;
                             <dd class="font-medium text-slate-800"><?= View::escape($giftcard['recipient_name']) ?></dd>
                         </div>
                     <?php endif; ?>
+                    <?php if (!empty($giftcard['sender_name'])): ?>
+                        <div>
+                            <dt class="text-slate-500">De</dt>
+                            <dd class="font-medium text-slate-800"><?= View::escape($giftcard['sender_name']) ?></dd>
+                        </div>
+                    <?php endif; ?>
                     <div>
                         <dt class="text-slate-500">Vence</dt>
                         <dd class="font-medium text-slate-800"><?= $giftcard['expires_at'] ? View::escape($giftcard['expires_at']) : 'Sin vencimiento' ?></dd>

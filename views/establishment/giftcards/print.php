@@ -120,6 +120,9 @@ $primaryColor = $establishment['primary_color'] ?? '#111827';
             <?php if (!empty($giftcard['recipient_name'])): ?>
                 <p class="recipient"><strong>Para:</strong> <?= View::escape($giftcard['recipient_name']) ?></p>
             <?php endif; ?>
+            <?php if (!empty($giftcard['sender_name'])): ?>
+                <p class="recipient"><strong>De:</strong> <?= View::escape($giftcard['sender_name']) ?></p>
+            <?php endif; ?>
 
             <div class="qr-block">
                 <img src="<?= View::escape($qrDataUri) ?>" alt="QR de la giftcard">

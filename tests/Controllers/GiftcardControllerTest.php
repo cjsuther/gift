@@ -222,4 +222,48 @@ final class GiftcardControllerTest extends TestCase
         $this->assertMatchesRegularExpression('/^[a-f0-9]{32}$/', $token);
         $this->assertSame(3, $calls);
     }
+
+    public function test_store_rechaza_sender_email_con_formato_invalido(): void
+    {
+        $repo = $this->createMock(GiftcardRepository::class);
+        $repo->expects($this->never())->method('create');
+
+        $req = $this->withAuth(TestRequest::create('POST', '/api/giftcards'))
+            ->withParsedBody([
+                'title'        => 'Combo',
+                'sender_name'  => 'María',
+                'sender_email' => 'no-es-email',
+            ]);
+
+        $res  = $this->controller($repo)->store($req, new Response());
+        $body = json_decode((string) $res->getBody(), true);
+
+        $this->assertSame(422, $res->getStatusCode());
+        $this->assertArrayHasKey('sender_email', $body['fields']);
+    }
+
+    public function test_store_acepta_sender_name_sin_sender_email(): void
+    {
+        $repo = $this->createMock(GiftcardRepository::class);
+        $repo->method('tokenExists')->willReturn(false);
+        $repo->expects($this->once())
+             ->method('create')
+             ->with(
+                 self::TENANT,
+                 self::USER_ID,
+                 $this->matchesRegularExpression('/^[a-f0-9]{32}$/'),
+                 $this->callback(fn (array $d) => $d['sender_name'] === 'María' && $d['sender_email'] === null),
+             )
+             ->willReturn(123);
+        $repo->method('findForTenant')->willReturn([
+            'id' => 123, 'token' => 'a1b2c3d4e5f6071829304a5b6c7d8e9f',
+            'title' => 'Combo', 'status' => 'active',
+        ]);
+
+        $req = $this->withAuth(TestRequest::create('POST', '/api/giftcards'))
+            ->withParsedBody(['title' => 'Combo', 'sender_name' => 'María']);
+
+        $res = $this->controller($repo)->store($req, new Response());
+        $this->assertSame(201, $res->getStatusCode());
+    }
 }

@@ -69,6 +69,9 @@ final class GiftcardController
 
         $v = (new Validator($data))
             ->required('title')->minLength('title', 2);
+        if (array_key_exists('sender_email', $data) && !empty($data['sender_email'])) {
+            $v->email('sender_email');
+        }
         if (array_key_exists('expires_at', $data) && $data['expires_at'] !== '' && !$this->validDate($data['expires_at'])) {
             return ApiResponse::error($response, 'Fecha de vencimiento inválida.', 422, [
                 'fields' => ['expires_at' => 'Formato esperado: AAAA-MM-DD.'],
@@ -90,6 +93,8 @@ final class GiftcardController
                 'expires_at'        => $this->nullable($data['expires_at'] ?? null),
                 'recipient_name'    => $this->nullable($data['recipient_name'] ?? null),
                 'recipient_contact' => $this->nullable($data['recipient_contact'] ?? null),
+                'sender_name'       => $this->nullable($data['sender_name'] ?? null),
+                'sender_email'      => $this->nullable($data['sender_email'] ?? null),
             ], $imageSaver);
         } catch (\RuntimeException $e) {
             return ApiResponse::error($response, $e->getMessage(), 422);
@@ -126,6 +131,9 @@ final class GiftcardController
 
         $v = new Validator($data);
         if (array_key_exists('title', $data)) { $v->minLength('title', 2); }
+        if (array_key_exists('sender_email', $data) && !empty($data['sender_email'])) {
+            $v->email('sender_email');
+        }
         if (array_key_exists('expires_at', $data) && $data['expires_at'] !== '' && !$this->validDate($data['expires_at'])) {
             return ApiResponse::error($response, 'Fecha de vencimiento inválida.', 422, [
                 'fields' => ['expires_at' => 'Formato esperado: AAAA-MM-DD.'],
@@ -136,7 +144,7 @@ final class GiftcardController
         }
 
         $patch = [];
-        foreach (['title', 'description', 'recipient_name', 'recipient_contact'] as $field) {
+        foreach (['title', 'description', 'recipient_name', 'recipient_contact', 'sender_name', 'sender_email'] as $field) {
             if (array_key_exists($field, $data)) {
                 $patch[$field] = $field === 'title' ? trim((string) $data[$field]) : $this->nullable($data[$field]);
             }

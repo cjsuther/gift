@@ -27,6 +27,15 @@ final class View
         return $response->withHeader('Content-Type', 'text/html; charset=utf-8');
     }
 
+    /**
+     * Renderiza un template y devuelve el HTML como string.
+     * Útil para emails y otras salidas no-HTTP.
+     */
+    public function renderToString(string $template, array $data = []): string
+    {
+        return $this->capture($template, $data);
+    }
+
     private function capture(string $template, array $data): string
     {
         $file = $this->viewsDir . '/' . $template . '.php';

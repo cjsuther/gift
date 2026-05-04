@@ -9,6 +9,8 @@ $jsInitial = json_encode([
     'description'       => $isEdit ? (string) ($editing['description'] ?? '') : '',
     'recipient_name'    => $isEdit ? (string) ($editing['recipient_name'] ?? '') : '',
     'recipient_contact' => $isEdit ? (string) ($editing['recipient_contact'] ?? '') : '',
+    'sender_name'       => $isEdit ? (string) ($editing['sender_name'] ?? '') : '',
+    'sender_email'      => $isEdit ? (string) ($editing['sender_email'] ?? '') : '',
     'expires_at'        => $isEdit ? (string) ($editing['expires_at'] ?? '') : '',
     'image_path'        => $isEdit ? ($editing['image_path'] ?? null) : null,
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -59,6 +61,27 @@ $jsInitial = json_encode([
             </div>
         </div>
 
+        <div class="border-t border-slate-200 pt-5 space-y-4">
+            <div>
+                <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Quien regala</h2>
+                <p class="text-xs text-slate-500 mt-1">Si cargás el email, le avisamos automáticamente cuando la giftcard sea canjeada.</p>
+            </div>
+            <div class="grid sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Nombre (opcional)</label>
+                    <input type="text" x-model="form.sender_name" maxlength="150"
+                           class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-800 focus:border-transparent outline-none transition"
+                           placeholder="De: María García">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Email (opcional)</label>
+                    <input type="email" x-model="form.sender_email" maxlength="150"
+                           class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-800 focus:border-transparent outline-none transition"
+                           placeholder="maria@ejemplo.com">
+                </div>
+            </div>
+        </div>
+
         <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">Fecha de vencimiento (opcional)</label>
             <input type="date" x-model="form.expires_at"
@@ -96,6 +119,8 @@ $jsInitial = json_encode([
                 description: initial.description || '',
                 recipient_name: initial.recipient_name || '',
                 recipient_contact: initial.recipient_contact || '',
+                sender_name: initial.sender_name || '',
+                sender_email: initial.sender_email || '',
                 expires_at: initial.expires_at || '',
             },
             imageFile: null,

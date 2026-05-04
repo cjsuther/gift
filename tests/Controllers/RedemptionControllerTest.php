@@ -6,9 +6,11 @@ namespace App\Tests\Controllers;
 
 use App\Auth\AuthenticatedUser;
 use App\Controllers\RedemptionController;
+use App\Helpers\View;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\TenantMiddleware;
 use App\Repositories\GiftcardRepository;
+use App\Services\MailService;
 use App\Tests\Support\TestRequest;
 use PHPUnit\Framework\TestCase;
 use Slim\Psr7\Response;
@@ -213,5 +215,122 @@ final class RedemptionControllerTest extends TestCase
         $res = $controller->lookupShort($req, new Response());
 
         $this->assertSame(409, $res->getStatusCode());
+    }
+
+    // -----------------------------------------------------------------
+    // Email al sender post-canje
+    // -----------------------------------------------------------------
+
+    public function test_redeem_envia_email_si_sender_email_y_mail_configurado(): void
+    {
+        $repo = $this->createMock(GiftcardRepository::class);
+        $repo->method('findByTokenForTenant')->willReturn([
+            'id' => 7, 'token' => self::TOKEN, 'status' => 'active',
+            'expires_at' => null, 'sender_email' => 'maria@x.com',
+            'sender_name' => 'María',
+        ]);
+        $repo->method('redeem')->willReturn(true);
+        $repo->method('findByTokenAny')->willReturn([
+            'id' => 7, 'token' => self::TOKEN, 'status' => 'redeemed',
+            'title' => 'Combo', 'recipient_name' => 'Juan',
+            'sender_email' => 'maria@x.com', 'sender_name' => 'María',
+            'establishment_name' => 'Café Demo',
+            'redeemed_at' => '2026-05-04 18:00:00',
+            'redeemed_by_name' => 'Pedro',
+        ]);
+
+        $mail = $this->createMock(MailService::class);
+        $mail->method('isConfigured')->willReturn(true);
+        $mail->expects($this->once())
+             ->method('send')
+             ->with(
+                 'maria@x.com',
+                 'María',
+                 $this->stringContains('Tu giftcard'),
+                 $this->stringContains('Combo'),
+             )
+             ->willReturn(true);
+
+        $view = new View(__DIR__ . '/../../views');
+
+        $controller = new RedemptionController($repo, $mail, $view, 'https://example.com');
+        $req = $this->withAuth(TestRequest::create('POST', '/api/redeem/' . self::TOKEN));
+        $res = $controller->redeem($req, new Response(), ['token' => self::TOKEN]);
+
+        $this->assertSame(200, $res->getStatusCode());
+    }
+
+    public function test_redeem_NO_envia_email_si_sender_email_esta_vacio(): void
+    {
+        $repo = $this->createMock(GiftcardRepository::class);
+        $repo->method('findByTokenForTenant')->willReturn([
+            'id' => 7, 'token' => self::TOKEN, 'status' => 'active',
+            'expires_at' => null, 'sender_email' => null,
+        ]);
+        $repo->method('redeem')->willReturn(true);
+
+        $mail = $this->createMock(MailService::class);
+        $mail->expects($this->never())->method('send');
+
+        $view = new View(__DIR__ . '/../../views');
+
+        $controller = new RedemptionController($repo, $mail, $view, 'https://example.com');
+        $req = $this->withAuth(TestRequest::create('POST', '/api/redeem/' . self::TOKEN));
+        $res = $controller->redeem($req, new Response(), ['token' => self::TOKEN]);
+
+        $this->assertSame(200, $res->getStatusCode());
+    }
+
+    public function test_redeem_NO_envia_email_si_smtp_no_esta_configurado(): void
+    {
+        $repo = $this->createMock(GiftcardRepository::class);
+        $repo->method('findByTokenForTenant')->willReturn([
+            'id' => 7, 'token' => self::TOKEN, 'status' => 'active',
+            'expires_at' => null, 'sender_email' => 'maria@x.com',
+        ]);
+        $repo->method('redeem')->willReturn(true);
+
+        $mail = $this->createMock(MailService::class);
+        $mail->method('isConfigured')->willReturn(false);
+        $mail->expects($this->never())->method('send');
+
+        $view = new View(__DIR__ . '/../../views');
+
+        $controller = new RedemptionController($repo, $mail, $view, 'https://example.com');
+        $req = $this->withAuth(TestRequest::create('POST', '/api/redeem/' . self::TOKEN));
+        $res = $controller->redeem($req, new Response(), ['token' => self::TOKEN]);
+
+        $this->assertSame(200, $res->getStatusCode());
+    }
+
+    public function test_redeem_responde_200_aunque_el_envio_de_email_falle(): void
+    {
+        $repo = $this->createMock(GiftcardRepository::class);
+        $repo->method('findByTokenForTenant')->willReturn([
+            'id' => 7, 'token' => self::TOKEN, 'status' => 'active',
+            'expires_at' => null, 'sender_email' => 'maria@x.com',
+        ]);
+        $repo->method('redeem')->willReturn(true);
+        $repo->method('findByTokenAny')->willReturn([
+            'id' => 7, 'token' => self::TOKEN, 'status' => 'redeemed',
+            'title' => 'Combo', 'sender_email' => 'maria@x.com', 'sender_name' => 'María',
+            'establishment_name' => 'Café Demo', 'redeemed_at' => '2026-05-04 18:00:00',
+            'redeemed_by_name' => 'Pedro',
+        ]);
+
+        $mail = $this->createMock(MailService::class);
+        $mail->method('isConfigured')->willReturn(true);
+        $mail->method('send')->willReturn(false);   // simular falla SMTP
+
+        $view = new View(__DIR__ . '/../../views');
+
+        $controller = new RedemptionController($repo, $mail, $view, 'https://example.com');
+        $req = $this->withAuth(TestRequest::create('POST', '/api/redeem/' . self::TOKEN));
+        $res = $controller->redeem($req, new Response(), ['token' => self::TOKEN]);
+
+        // El canje completó OK aunque el email falló
+        $this->assertSame(200, $res->getStatusCode());
+        $body = json_decode((string) $res->getBody(), true);
+        $this->assertTrue($body['ok']);
     }
 }

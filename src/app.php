@@ -22,6 +22,7 @@ use App\Repositories\EstablishmentRepository;
 use App\Repositories\GiftcardRepository;
 use App\Repositories\UserRepository;
 use App\Services\ImageService;
+use App\Services\MailService;
 use App\Services\QrService;
 use App\Services\TokenService;
 use Dotenv\Dotenv;
@@ -69,7 +70,16 @@ $tokenService       = new TokenService();
 $qrService          = new QrService((string) $appConfig['url']);
 $giftcardController = new GiftcardController($giftcardRepo, $tokenService, $qrService, $imageService);
 
-$redemptionController = new RedemptionController($giftcardRepo);
+$mailService = new MailService(
+    host:        (string) ($_ENV['MAIL_HOST']      ?? ''),
+    port:        (int)    ($_ENV['MAIL_PORT']      ?? 465),
+    username:    (string) ($_ENV['MAIL_USER']      ?? ''),
+    password:    (string) ($_ENV['MAIL_PASS']      ?? ''),
+    fromAddress: (string) ($_ENV['MAIL_FROM']      ?? ''),
+    fromName:    (string) ($_ENV['MAIL_FROM_NAME'] ?? 'Giftcards'),
+);
+
+$redemptionController = new RedemptionController($giftcardRepo, $mailService, $view, (string) $appConfig['url']);
 $dashboardController  = new DashboardController($giftcardRepo);
 $profileController    = new ProfileController($userTenantRepo);
 

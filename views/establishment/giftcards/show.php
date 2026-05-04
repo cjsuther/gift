@@ -61,6 +61,15 @@ $whatsappUrl  = 'https://wa.me/?text=' . rawurlencode($whatsappText);
                                 <?php endif; ?>
                             </div>
                         <?php endif; ?>
+                        <?php if (!empty($giftcard['sender_name']) || !empty($giftcard['sender_email'])): ?>
+                            <div>
+                                <dt class="text-slate-500">De</dt>
+                                <dd class="font-medium text-slate-800"><?= View::escape($giftcard['sender_name'] ?? '—') ?></dd>
+                                <?php if (!empty($giftcard['sender_email'])): ?>
+                                    <dd class="text-xs text-slate-500"><?= View::escape($giftcard['sender_email']) ?></dd>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
                         <div>
                             <dt class="text-slate-500">Vencimiento</dt>
                             <dd class="font-medium text-slate-800"><?= $giftcard['expires_at'] ? View::escape($giftcard['expires_at']) : 'Sin vencimiento' ?></dd>

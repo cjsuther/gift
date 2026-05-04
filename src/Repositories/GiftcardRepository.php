@@ -125,10 +125,11 @@ class GiftcardRepository
         $stmt = $this->pdo->prepare(
             "INSERT INTO giftcards
              (establishment_id, created_by_user_id, token, title, description,
-              status, expires_at, recipient_name, recipient_contact)
+              status, expires_at, recipient_name, recipient_contact,
+              sender_name, sender_email)
              VALUES
              (:eid, :uid, :token, :title, :description,
-              'active', :expires_at, :rname, :rcontact)"
+              'active', :expires_at, :rname, :rcontact, :sname, :semail)"
         );
         $stmt->execute([
             'eid'         => $establishmentId,
@@ -139,6 +140,8 @@ class GiftcardRepository
             'expires_at'  => $data['expires_at'] ?? null,
             'rname'       => $data['recipient_name'] ?? null,
             'rcontact'    => $data['recipient_contact'] ?? null,
+            'sname'       => $data['sender_name'] ?? null,
+            'semail'      => $data['sender_email'] ?? null,
         ]);
         $id = (int) $this->pdo->lastInsertId();
 
@@ -168,7 +171,7 @@ class GiftcardRepository
         $sets   = [];
         $params = ['id' => $id, 'eid' => $establishmentId];
 
-        foreach (['title', 'description', 'expires_at', 'recipient_name', 'recipient_contact'] as $field) {
+        foreach (['title', 'description', 'expires_at', 'recipient_name', 'recipient_contact', 'sender_name', 'sender_email'] as $field) {
             if (array_key_exists($field, $data)) {
                 $sets[]            = "{$field} = :{$field}";
                 $params[$field]    = $data[$field];
