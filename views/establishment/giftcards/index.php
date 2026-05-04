@@ -54,7 +54,8 @@ $canManage = $user->isEstablishmentAdmin();
             </div>
         </template>
         <template x-if="!loading && rows.length > 0">
-            <table class="w-full text-sm">
+            <div class="overflow-x-auto">
+            <table class="w-full text-sm min-w-[720px]">
                 <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
                     <tr>
                         <th class="text-left px-4 py-3 w-16"></th>
@@ -107,6 +108,7 @@ $canManage = $user->isEstablishmentAdmin();
                     </template>
                 </tbody>
             </table>
+            </div>
         </template>
     </div>
 

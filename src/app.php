@@ -9,6 +9,7 @@ use App\Controllers\AuthController;
 use App\Controllers\DashboardController;
 use App\Controllers\EstablishmentController;
 use App\Controllers\GiftcardController;
+use App\Controllers\ProfileController;
 use App\Controllers\RedemptionController;
 use App\Controllers\UserController;
 use App\Database\Connection;
@@ -70,6 +71,7 @@ $giftcardController = new GiftcardController($giftcardRepo, $tokenService, $qrSe
 
 $redemptionController = new RedemptionController($giftcardRepo);
 $dashboardController  = new DashboardController($giftcardRepo);
+$profileController    = new ProfileController($userTenantRepo);
 
 // 4) Slim app
 $app = AppFactory::create();
@@ -96,6 +98,20 @@ $app->group('/api/auth', function ($g) use ($userRepository, $jwtService) {
     $g->get('/me',      [$controller, 'me']);
     $g->post('/logout', [$controller, 'logout']);
 })->add($authApi);
+
+// --- Mi perfil (cualquier usuario logueado) ---
+$app->put('/api/perfil', [$profileController, 'update'])->add($authApi);
+$app->post('/api/perfil', [$profileController, 'update'])->add($authApi);
+
+$app->get('/perfil', function ($req, $res) use ($view, $userTenantRepo) {
+    $user    = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+    $editing = $userTenantRepo->findAny((int) $user->id);
+    return $view->withLayout($res, 'auth/profile', 'layouts/admin', [
+        'user'    => $user,
+        'title'   => 'Mi perfil',
+        'editing' => $editing,
+    ]);
+})->add($authWeb);
 
 // --- Super Admin: Establecimientos (API JSON) ---
 $app->group('/api/admin/establishments', function ($g) use ($establishmentController) {

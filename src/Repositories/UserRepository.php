@@ -250,4 +250,20 @@ class UserRepository
         $stmt = $this->pdo->prepare('UPDATE users SET is_active = 0 WHERE id = :id');
         $stmt->execute(['id' => $id]);
     }
+
+    /**
+     * Trae solo el password_hash del usuario para verificación de credenciales
+     * (cambio de password en el perfil propio). NO usar para enriquecer la
+     * vista — los demás métodos no exponen password_hash a propósito.
+     */
+    public function getPasswordHash(int $id): ?string
+    {
+        $stmt = $this->pdo->prepare('SELECT password_hash FROM users WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch();
+        if ($row === false) {
+            return null;
+        }
+        return (string) $row['password_hash'];
+    }
 }
