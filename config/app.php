@@ -8,10 +8,11 @@ return [
     'url'   => rtrim($_ENV['APP_URL'] ?? 'http://localhost:8000', '/'),
 
     'jwt' => [
-        'secret'    => $_ENV['JWT_SECRET'] ?? '',
-        'ttl_hours' => (int) ($_ENV['JWT_TTL_HOURS'] ?? 2),
-        'algo'      => 'HS256',
-        'issuer'    => 'giftcards-app',
+        'secret'             => $_ENV['JWT_SECRET'] ?? '',
+        'ttl_hours'          => (int) ($_ENV['JWT_TTL_HOURS']           ?? 720),   // 30 días default
+        'remember_ttl_hours' => (int) ($_ENV['JWT_REMEMBER_TTL_HOURS']  ?? 2160),  // 90 días si "remember" extra largo
+        'algo'               => 'HS256',
+        'issuer'             => 'giftcards-app',
     ],
 
     'upload' => [

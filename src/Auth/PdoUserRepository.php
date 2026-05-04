@@ -6,7 +6,7 @@ namespace App\Auth;
 
 use PDO;
 
-final class PdoUserRepository implements UserProvider
+class PdoUserRepository implements UserProvider
 {
     public function __construct(private readonly PDO $pdo)
     {

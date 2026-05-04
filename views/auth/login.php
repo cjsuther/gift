@@ -39,6 +39,12 @@
                     placeholder="••••••••">
             </div>
 
+            <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                <input type="checkbox" x-model="remember"
+                       class="rounded border-slate-300 text-slate-800 focus:ring-slate-800">
+                <span>Mantenerme conectado en este dispositivo</span>
+            </label>
+
             <div x-show="error" x-cloak class="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm" x-text="error"></div>
 
             <button
@@ -60,6 +66,7 @@
             return {
                 email: '',
                 password: '',
+                remember: true,
                 error: '',
                 loading: false,
                 async submit() {
@@ -69,15 +76,22 @@
                         const res = await fetch('/api/auth/login', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ email: this.email, password: this.password }),
+                            credentials: 'same-origin',
+                            body: JSON.stringify({
+                                email: this.email,
+                                password: this.password,
+                                remember: this.remember,
+                            }),
                         });
                         const data = await res.json();
                         if (!res.ok) {
                             this.error = data.error || 'Error al ingresar';
                             return;
                         }
+                        // El server ya seteó la cookie HttpOnly via Set-Cookie.
+                        // Mantenemos localStorage como fallback para Authorization header
+                        // en clientes/contextos donde la cookie no se mande automático.
                         localStorage.setItem('auth_token', data.token);
-                        document.cookie = `auth_token=${data.token}; Path=/; SameSite=Lax`;
 
                         // Si vino con ?next=/algo, ir ahí (post-scan QR, deep link, etc.)
                         const params = new URLSearchParams(window.location.search);

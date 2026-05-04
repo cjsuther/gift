@@ -101,10 +101,11 @@ $tenant  = new TenantMiddleware();
 // con ->add(), por eso se agregan al revés (último ->add se ejecuta primero).
 
 // --- Auth ---
-$app->post('/api/auth/login', [new AuthController($userRepository, $jwtService), 'login']);
+$rememberTtl = (int) ($appConfig['jwt']['remember_ttl_hours'] ?? 720);
+$app->post('/api/auth/login', [new AuthController($userRepository, $jwtService, $rememberTtl), 'login']);
 
-$app->group('/api/auth', function ($g) use ($userRepository, $jwtService) {
-    $controller = new AuthController($userRepository, $jwtService);
+$app->group('/api/auth', function ($g) use ($userRepository, $jwtService, $rememberTtl) {
+    $controller = new AuthController($userRepository, $jwtService, $rememberTtl);
     $g->get('/me',      [$controller, 'me']);
     $g->post('/logout', [$controller, 'logout']);
 })->add($authApi);

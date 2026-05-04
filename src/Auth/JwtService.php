@@ -20,19 +20,28 @@ final class JwtService
         }
     }
 
-    public function issue(int $userId, string $role, ?int $establishmentId): string
+    public function issue(int $userId, string $role, ?int $establishmentId, ?int $ttlHoursOverride = null): string
     {
+        $ttl = $ttlHoursOverride ?? $this->ttlHours;
+        if ($ttl < 1) {
+            $ttl = 1;
+        }
         $now = time();
         $payload = [
             'iss'    => $this->issuer,
             'sub'    => $userId,
             'iat'    => $now,
-            'exp'    => $now + ($this->ttlHours * 3600),
+            'exp'    => $now + ($ttl * 3600),
             'role'   => $role,
             'tenant' => $establishmentId,
         ];
 
         return JWT::encode($payload, $this->secret, $this->algo);
+    }
+
+    public function defaultTtlSeconds(): int
+    {
+        return $this->ttlHours * 3600;
     }
 
     /**
