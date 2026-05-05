@@ -116,7 +116,7 @@
                 </div>
             </div>
 
-            <div class="grid sm:grid-cols-3 gap-4">
+            <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <a href="/giftcards/new" class="block bg-white rounded-xl shadow-sm border border-slate-200 p-4 hover:border-slate-400 hover:shadow transition text-center">
                     <p class="font-semibold text-slate-800">+ Nueva giftcard</p>
                     <p class="text-xs text-slate-500 mt-1">Crear una nueva con QR.</p>
@@ -128,6 +128,10 @@
                 <a href="/users" class="block bg-white rounded-xl shadow-sm border border-slate-200 p-4 hover:border-slate-400 hover:shadow transition text-center">
                     <p class="font-semibold text-slate-800">Usuarios</p>
                     <p class="text-xs text-slate-500 mt-1">Gestionar quién puede canjear.</p>
+                </a>
+                <a href="/guia" target="_blank" class="block bg-white rounded-xl shadow-sm border border-slate-200 p-4 hover:border-slate-400 hover:shadow transition text-center">
+                    <p class="font-semibold text-slate-800">📘 Guía de uso</p>
+                    <p class="text-xs text-slate-500 mt-1">Infografía imprimible del flujo.</p>
                 </a>
             </div>
         </div>

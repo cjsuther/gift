@@ -380,6 +380,20 @@ $app->get('/scan', function ($req, $res) use ($view) {
     ->add(new RoleMiddleware('establishment_admin', 'establishment_user'))
     ->add($authWeb);
 
+// --- /guia: infografía imprimible del flujo del establecimiento ---
+$app->get('/guia', function ($req, $res) use ($view, $establishmentRepo) {
+    $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+    $est  = $establishmentRepo->find((int) $user->establishmentId);
+    if ($est === null) {
+        return $res->withHeader('Location', '/dashboard')->withStatus(302);
+    }
+    // Standalone — la guía tiene su propio HTML completo, no usa layout admin.
+    return $view->render($res, 'establishment/guide', ['establishment' => $est]);
+})
+    ->add($tenant)
+    ->add(new RoleMiddleware('establishment_admin', 'establishment_user'))
+    ->add($authWeb);
+
 // --- /redeem/{token}: PÚBLICO con auth opcional ---
 //
 // Cualquiera con la URL del QR puede ver el preview de la giftcard.
