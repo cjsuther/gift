@@ -21,8 +21,20 @@ $statusClasses = [
     'expired'   => 'bg-amber-100 text-amber-700',
     'cancelled' => 'bg-slate-200 text-slate-600',
 ];
-$whatsappText = "Hola! Te paso esta giftcard de " . ($user->name) . ". Canjeala en este link: " . $redeemUrl;
+$senderLabel  = !empty($giftcard['sender_name']) ? (string) $giftcard['sender_name'] : (string) $user->name;
+$whatsappText = "Hola! Te paso esta giftcard de " . $senderLabel . ". Canjeala en este link: " . $redeemUrl;
 $whatsappUrl  = 'https://wa.me/?text=' . rawurlencode($whatsappText);
+
+$recipientContact = (string) ($giftcard['recipient_contact'] ?? '');
+$emailTo          = (filter_var($recipientContact, FILTER_VALIDATE_EMAIL) !== false) ? $recipientContact : '';
+$emailSubject     = 'Tenés una giftcard de ' . $senderLabel;
+$emailBody        = "Hola" . (!empty($giftcard['recipient_name']) ? ' ' . $giftcard['recipient_name'] : '') . ",\n\n"
+                  . "Te paso esta giftcard de " . $senderLabel . ".\n"
+                  . "Canjeala en este link: " . $redeemUrl . "\n\n"
+                  . "¡Disfrutala!";
+$emailUrl         = 'mailto:' . rawurlencode($emailTo)
+                  . '?subject=' . rawurlencode($emailSubject)
+                  . '&body=' . rawurlencode($emailBody);
 ?>
 <div x-data="{ cancelLoading: false, error: '' }" class="space-y-6">
     <div>
@@ -109,6 +121,10 @@ $whatsappUrl  = 'https://wa.me/?text=' . rawurlencode($whatsappText);
                     <a href="<?= View::escape($whatsappUrl) ?>" target="_blank" rel="noopener"
                        class="block w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2.5 rounded-lg transition">
                         Compartir por WhatsApp
+                    </a>
+                    <a href="<?= View::escape($emailUrl) ?>"
+                       class="block w-full text-center bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold py-2.5 rounded-lg transition">
+                        Enviar por email
                     </a>
                     <a href="/giftcards/<?= (int) $giftcard['id'] ?>/print" target="_blank"
                        class="block w-full text-center bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold py-2.5 rounded-lg border border-slate-300 transition">
