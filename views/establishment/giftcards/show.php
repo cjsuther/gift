@@ -38,39 +38,13 @@ $emailBody        = "Hola" . (!empty($giftcard['recipient_name']) ? ' ' . $giftc
 $emailUrl         = 'mailto:' . rawurlencode($emailTo)
                   . '?subject=' . rawurlencode($emailSubject)
                   . '&body=' . rawurlencode($emailBody);
+
+$jsInitial = json_encode([
+    'giftcardId' => (int) $giftcard['id'],
+    'emailTo'    => $emailTo,
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 ?>
-<div x-data="{
-        cancelLoading: false,
-        error: '',
-        emailOpen: false,
-        emailLoading: false,
-        emailTo: <?= json_encode($emailTo, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
-        emailMsg: '',
-        emailOk: false,
-        async sendEmail() {
-            if (!this.emailTo) { this.emailMsg = 'Ingresá un email.'; this.emailOk = false; return; }
-            this.emailLoading = true; this.emailMsg = ''; this.emailOk = false;
-            try {
-                const fd = new FormData();
-                fd.append('email', this.emailTo);
-                const r = await window.api('/api/giftcards/<?= (int) $giftcard['id'] ?>/send-email', { method: 'POST', body: fd });
-                if (!r) return;
-                const d = await r.json();
-                if (r.ok && d.ok) {
-                    this.emailOk = true;
-                    this.emailMsg = 'Email enviado a ' + (d.sent_to || this.emailTo) + '.';
-                } else {
-                    this.emailOk = false;
-                    this.emailMsg = (d && d.error) || 'No se pudo enviar.';
-                }
-            } catch (e) {
-                this.emailOk = false;
-                this.emailMsg = e.message || 'Error de red.';
-            } finally {
-                this.emailLoading = false;
-            }
-        },
-    }" class="space-y-6">
+<div x-data='giftcardShow(<?= $jsInitial ?>)' class="space-y-6">
     <div>
         <a href="/giftcards" class="text-sm text-slate-500 hover:text-slate-700">← Volver al listado</a>
         <div class="mt-2 flex items-start justify-between gap-4 flex-wrap">
@@ -157,7 +131,7 @@ $emailUrl         = 'mailto:' . rawurlencode($emailTo)
                         Compartir por WhatsApp
                     </a>
                     <?php if ($mailEnabled): ?>
-                        <button type="button" @click="emailOpen = !emailOpen; emailMsg = ''"
+                        <button type="button" @click="toggleEmail()"
                                 class="block w-full text-center bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold py-2.5 rounded-lg transition">
                             Enviar por email
                         </button>
@@ -190,15 +164,7 @@ $emailUrl         = 'mailto:' . rawurlencode($emailTo)
                            class="block w-full text-center bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold py-2.5 rounded-lg border border-slate-300 transition">
                             Editar
                         </a>
-                        <button type="button" :disabled="cancelLoading"
-                                @click="if (confirm('¿Cancelar esta giftcard? No se puede deshacer.')) {
-                                    cancelLoading = true; error = '';
-                                    window.api('/api/giftcards/<?= (int) $giftcard['id'] ?>', { method: 'DELETE' })
-                                        .then(r => r ? r.json() : null).then(d => {
-                                            if (d && d.ok) window.location.href = '/giftcards';
-                                            else { error = (d && d.error) || 'Error al cancelar.'; cancelLoading = false; }
-                                        }).catch(e => { error = e.message || 'Error de red.'; cancelLoading = false; });
-                                }"
+                        <button type="button" :disabled="cancelLoading" @click="cancelGiftcard()"
                                 class="block w-full text-center bg-white hover:bg-red-50 text-red-700 text-sm font-semibold py-2.5 rounded-lg border border-red-300 transition disabled:opacity-50">
                             <span x-show="!cancelLoading">Cancelar giftcard</span>
                             <span x-show="cancelLoading" x-cloak>Cancelando…</span>
@@ -211,3 +177,70 @@ $emailUrl         = 'mailto:' . rawurlencode($emailTo)
 
     <div x-show="error" x-cloak class="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm" x-text="error"></div>
 </div>
+
+<script>
+    function giftcardShow(initial) {
+        return {
+            giftcardId: initial.giftcardId,
+            cancelLoading: false,
+            error: '',
+            emailOpen: false,
+            emailLoading: false,
+            emailTo: initial.emailTo || '',
+            emailMsg: '',
+            emailOk: false,
+            toggleEmail() {
+                this.emailOpen = !this.emailOpen;
+                this.emailMsg = '';
+            },
+            async sendEmail() {
+                if (!this.emailTo) {
+                    this.emailMsg = 'Ingresá un email.';
+                    this.emailOk = false;
+                    return;
+                }
+                this.emailLoading = true;
+                this.emailMsg = '';
+                this.emailOk = false;
+                try {
+                    const fd = new FormData();
+                    fd.append('email', this.emailTo);
+                    const r = await window.api('/api/giftcards/' + this.giftcardId + '/send-email', { method: 'POST', body: fd });
+                    if (!r) return;
+                    const d = await r.json();
+                    if (r.ok && d.ok) {
+                        this.emailOk = true;
+                        this.emailMsg = 'Email enviado a ' + (d.sent_to || this.emailTo) + '.';
+                    } else {
+                        this.emailOk = false;
+                        this.emailMsg = (d && d.error) || 'No se pudo enviar.';
+                    }
+                } catch (e) {
+                    this.emailOk = false;
+                    this.emailMsg = e.message || 'Error de red.';
+                } finally {
+                    this.emailLoading = false;
+                }
+            },
+            async cancelGiftcard() {
+                if (!confirm('¿Cancelar esta giftcard? No se puede deshacer.')) return;
+                this.cancelLoading = true;
+                this.error = '';
+                try {
+                    const r = await window.api('/api/giftcards/' + this.giftcardId, { method: 'DELETE' });
+                    if (!r) return;
+                    const d = await r.json();
+                    if (d && d.ok) {
+                        window.location.href = '/giftcards';
+                    } else {
+                        this.error = (d && d.error) || 'Error al cancelar.';
+                    }
+                } catch (e) {
+                    this.error = e.message || 'Error de red.';
+                } finally {
+                    this.cancelLoading = false;
+                }
+            },
+        };
+    }
+</script>
