@@ -4,7 +4,10 @@
 /** @var string $redeemUrl */
 /** @var string $tokenShort */
 /** @var string $qrDataUri */
+/** @var bool $mailEnabled */
 use App\Helpers\View;
+
+$mailEnabled = $mailEnabled ?? false;
 
 $canManage  = $user->isEstablishmentAdmin();
 $status     = (string) $giftcard['status'];
@@ -36,7 +39,38 @@ $emailUrl         = 'mailto:' . rawurlencode($emailTo)
                   . '?subject=' . rawurlencode($emailSubject)
                   . '&body=' . rawurlencode($emailBody);
 ?>
-<div x-data="{ cancelLoading: false, error: '' }" class="space-y-6">
+<div x-data="{
+        cancelLoading: false,
+        error: '',
+        emailOpen: false,
+        emailLoading: false,
+        emailTo: <?= json_encode($emailTo, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
+        emailMsg: '',
+        emailOk: false,
+        async sendEmail() {
+            if (!this.emailTo) { this.emailMsg = 'Ingresá un email.'; this.emailOk = false; return; }
+            this.emailLoading = true; this.emailMsg = ''; this.emailOk = false;
+            try {
+                const fd = new FormData();
+                fd.append('email', this.emailTo);
+                const r = await window.api('/api/giftcards/<?= (int) $giftcard['id'] ?>/send-email', { method: 'POST', body: fd });
+                if (!r) return;
+                const d = await r.json();
+                if (r.ok && d.ok) {
+                    this.emailOk = true;
+                    this.emailMsg = 'Email enviado a ' + (d.sent_to || this.emailTo) + '.';
+                } else {
+                    this.emailOk = false;
+                    this.emailMsg = (d && d.error) || 'No se pudo enviar.';
+                }
+            } catch (e) {
+                this.emailOk = false;
+                this.emailMsg = e.message || 'Error de red.';
+            } finally {
+                this.emailLoading = false;
+            }
+        },
+    }" class="space-y-6">
     <div>
         <a href="/giftcards" class="text-sm text-slate-500 hover:text-slate-700">← Volver al listado</a>
         <div class="mt-2 flex items-start justify-between gap-4 flex-wrap">
@@ -122,10 +156,31 @@ $emailUrl         = 'mailto:' . rawurlencode($emailTo)
                        class="block w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2.5 rounded-lg transition">
                         Compartir por WhatsApp
                     </a>
-                    <a href="<?= View::escape($emailUrl) ?>"
-                       class="block w-full text-center bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold py-2.5 rounded-lg transition">
-                        Enviar por email
-                    </a>
+                    <?php if ($mailEnabled): ?>
+                        <button type="button" @click="emailOpen = !emailOpen; emailMsg = ''"
+                                class="block w-full text-center bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold py-2.5 rounded-lg transition">
+                            Enviar por email
+                        </button>
+                        <div x-show="emailOpen" x-cloak class="mt-2 space-y-2 bg-slate-50 border border-slate-200 rounded-lg p-3">
+                            <label class="block text-xs font-medium text-slate-600">Enviar a:</label>
+                            <input type="email" x-model="emailTo" required
+                                   placeholder="destinatario@ejemplo.com"
+                                   class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-600 focus:border-transparent outline-none">
+                            <button type="button" :disabled="emailLoading || !emailTo" @click="sendEmail()"
+                                    class="block w-full text-center bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold py-2 rounded-lg transition disabled:opacity-50">
+                                <span x-show="!emailLoading">Enviar ahora</span>
+                                <span x-show="emailLoading" x-cloak>Enviando…</span>
+                            </button>
+                            <p x-show="emailMsg" x-cloak class="text-xs"
+                               :class="emailOk ? 'text-emerald-700' : 'text-red-700'"
+                               x-text="emailMsg"></p>
+                        </div>
+                    <?php else: ?>
+                        <a href="<?= View::escape($emailUrl) ?>"
+                           class="block w-full text-center bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold py-2.5 rounded-lg transition">
+                            Enviar por email
+                        </a>
+                    <?php endif; ?>
                     <a href="/giftcards/<?= (int) $giftcard['id'] ?>/print" target="_blank"
                        class="block w-full text-center bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold py-2.5 rounded-lg border border-slate-300 transition">
                         Imprimir tarjeta

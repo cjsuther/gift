@@ -7,10 +7,13 @@ namespace App\Controllers;
 use App\Auth\AuthenticatedUser;
 use App\Helpers\Response as ApiResponse;
 use App\Helpers\Validator;
+use App\Helpers\View;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\TenantMiddleware;
+use App\Repositories\EstablishmentRepository;
 use App\Repositories\GiftcardRepository;
 use App\Services\ImageService;
+use App\Services\MailService;
 use App\Services\QrService;
 use App\Services\TokenService;
 use Psr\Http\Message\ResponseInterface;
@@ -28,6 +31,9 @@ final class GiftcardController
         private readonly TokenService $tokens,
         private readonly QrService $qr,
         private readonly ?ImageService $images = null,
+        private readonly ?MailService $mail = null,
+        private readonly ?View $view = null,
+        private readonly ?EstablishmentRepository $establishments = null,
     ) {
     }
 
@@ -207,6 +213,99 @@ final class GiftcardController
             ->withHeader('Content-Type', 'image/png')
             ->withHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
             ->withHeader('Cache-Control', 'private, max-age=300');
+    }
+
+    /**
+     * POST /api/giftcards/{id}/send-email — envía la giftcard por email al destinatario.
+     * Body: { email?: string } (opcional, override del recipient_contact si no es email válido).
+     * Adjunta el QR como PNG y lo embebe en el HTML vía CID.
+     */
+    public function sendEmail(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
+    {
+        if ($this->mail === null || $this->view === null) {
+            return ApiResponse::error($response, 'Envío de email no disponible.', 503);
+        }
+        if (!$this->mail->isConfigured()) {
+            return ApiResponse::error($response, 'El envío de email no está configurado en este servidor.', 503);
+        }
+
+        $tenant = $this->tenant($request);
+        $id     = (int) ($args['id'] ?? 0);
+        $row    = $this->repo->findForTenant($id, $tenant);
+        if ($row === null) {
+            return ApiResponse::notFound($response, 'Giftcard no encontrada.');
+        }
+        if ($row['status'] !== 'active') {
+            return ApiResponse::error(
+                $response,
+                'Solo podés enviar giftcards en estado "vigente".',
+                422,
+                ['fields' => ['status' => 'Estado actual: ' . $row['status']]]
+            );
+        }
+
+        $data        = $this->parseBody($request);
+        $bodyEmail   = $this->nullable($data['email'] ?? null);
+        $contactRaw  = (string) ($row['recipient_contact'] ?? '');
+        $contactMail = filter_var($contactRaw, FILTER_VALIDATE_EMAIL) !== false ? $contactRaw : null;
+
+        $toEmail = $bodyEmail ?? $contactMail;
+        if ($toEmail === null || filter_var($toEmail, FILTER_VALIDATE_EMAIL) === false) {
+            return ApiResponse::error(
+                $response,
+                'Necesitamos un email válido del destinatario.',
+                422,
+                ['fields' => ['email' => 'Ingresá un email válido o cargalo en el campo "Contacto destinatario".']]
+            );
+        }
+
+        $token = (string) $row['token'];
+        $est   = $this->establishments?->find((int) $row['establishment_id']);
+
+        try {
+            $qrPng = $this->qr->pngForToken($token);
+        } catch (\Throwable $e) {
+            error_log('[GiftcardController::sendEmail] Falló generar QR: ' . $e->getMessage());
+            return ApiResponse::error($response, 'No se pudo generar el QR.', 500);
+        }
+
+        $html = $this->view->renderToString('emails/giftcard_share', [
+            'giftcard'      => $row,
+            'establishment' => $est,
+            'redeemUrl'     => $this->qr->urlForToken($token),
+            'tokenShort'    => TokenService::shortLabel($token),
+            'qrCid'         => 'giftcard-qr',
+        ]);
+
+        $senderLabel = !empty($row['sender_name'])
+            ? (string) $row['sender_name']
+            : (string) ($est['name'] ?? 'Giftcards');
+        $subject = 'Tenés una giftcard de ' . $senderLabel;
+
+        $ok = $this->mail->send(
+            $toEmail,
+            (string) ($row['recipient_name'] ?? ''),
+            $subject,
+            $html,
+            null,
+            [[
+                'cid'      => 'giftcard-qr',
+                'data'     => $qrPng,
+                'filename' => 'giftcard-qr.png',
+                'mime'     => 'image/png',
+            ]],
+            [[
+                'data'     => $qrPng,
+                'filename' => 'giftcard-' . TokenService::shortLabel($token) . '.png',
+                'mime'     => 'image/png',
+            ]],
+        );
+
+        if (!$ok) {
+            return ApiResponse::error($response, 'No se pudo enviar el email. Revisá la configuración SMTP.', 502);
+        }
+
+        return ApiResponse::json($response, ['ok' => true, 'sent_to' => $toEmail]);
     }
 
     // ---------- helpers ----------

@@ -65,10 +65,9 @@ $userTenantRepo      = new UserRepository($pdo);
 $userController      = new UserController($userTenantRepo);
 $adminUserController = new AdminUserController($userTenantRepo);
 
-$giftcardRepo       = new GiftcardRepository($pdo);
-$tokenService       = new TokenService();
-$qrService          = new QrService((string) $appConfig['url']);
-$giftcardController = new GiftcardController($giftcardRepo, $tokenService, $qrService, $imageService);
+$giftcardRepo = new GiftcardRepository($pdo);
+$tokenService = new TokenService();
+$qrService    = new QrService((string) $appConfig['url']);
 
 $mailService = new MailService(
     host:        (string) ($_ENV['MAIL_HOST']      ?? ''),
@@ -77,6 +76,16 @@ $mailService = new MailService(
     password:    (string) ($_ENV['MAIL_PASS']      ?? ''),
     fromAddress: (string) ($_ENV['MAIL_FROM']      ?? ''),
     fromName:    (string) ($_ENV['MAIL_FROM_NAME'] ?? 'Giftcards'),
+);
+
+$giftcardController = new GiftcardController(
+    $giftcardRepo,
+    $tokenService,
+    $qrService,
+    $imageService,
+    $mailService,
+    $view,
+    $establishmentRepo,
 );
 
 $redemptionController = new RedemptionController($giftcardRepo, $mailService, $view, (string) $appConfig['url']);
@@ -267,13 +276,14 @@ $app->group('/api/giftcards', function ($g) use ($giftcardController) {
     $g->post('/{id}',    [$giftcardController, 'update']);   // alias para multipart
     $g->delete('/{id}',  [$giftcardController, 'destroy']);
     $g->get('/{id}/qr',  [$giftcardController, 'qr']);
+    $g->post('/{id}/send-email', [$giftcardController, 'sendEmail']);
 })
     ->add($tenant)
     ->add(new RoleMiddleware('establishment_admin'))
     ->add($authApi);
 
 // --- Giftcards: vistas HTML (admin + user en modo lectura) ---
-$app->group('', function ($g) use ($view, $giftcardRepo, $qrService, $establishmentRepo) {
+$app->group('', function ($g) use ($view, $giftcardRepo, $qrService, $establishmentRepo, $mailService) {
     $g->get('/giftcards', function ($req, $res) use ($view) {
         $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
         return $view->withLayout($res, 'establishment/giftcards/index', 'layouts/admin', [
@@ -292,19 +302,20 @@ $app->group('', function ($g) use ($view, $giftcardRepo, $qrService, $establishm
             'editing' => null,
         ]);
     });
-    $g->get('/giftcards/{id}', function ($req, $res, $args) use ($view, $giftcardRepo, $qrService) {
+    $g->get('/giftcards/{id}', function ($req, $res, $args) use ($view, $giftcardRepo, $qrService, $mailService) {
         $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
         $row  = $giftcardRepo->findForTenant((int) $args['id'], (int) $user->establishmentId);
         if ($row === null) {
             return $res->withHeader('Location', '/giftcards')->withStatus(302);
         }
         return $view->withLayout($res, 'establishment/giftcards/show', 'layouts/admin', [
-            'user'       => $user,
-            'title'      => $row['title'],
-            'giftcard'   => $row,
-            'redeemUrl'  => $qrService->urlForToken((string) $row['token']),
-            'tokenShort' => \App\Services\TokenService::shortLabel((string) $row['token']),
-            'qrDataUri'  => $qrService->dataUriForToken((string) $row['token']),
+            'user'        => $user,
+            'title'       => $row['title'],
+            'giftcard'    => $row,
+            'redeemUrl'   => $qrService->urlForToken((string) $row['token']),
+            'tokenShort'  => \App\Services\TokenService::shortLabel((string) $row['token']),
+            'qrDataUri'   => $qrService->dataUriForToken((string) $row['token']),
+            'mailEnabled' => $mailService->isConfigured(),
         ]);
     });
     $g->get('/giftcards/{id}/print', function ($req, $res, $args) use ($view, $giftcardRepo, $qrService, $establishmentRepo) {

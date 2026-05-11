@@ -38,9 +38,24 @@ class MailService
     /**
      * Envía un email HTML. Devuelve true si el SMTP aceptó el mensaje, false si falló.
      * Failures se loguean a error_log con el contexto.
+     *
+     * $embeddedImages: lista opcional de imágenes inline referenciadas en el HTML
+     * vía `<img src="cid:CID">`. Cada item: ['cid' => string, 'data' => binary,
+     * 'filename' => string, 'mime' => string]. Usamos CIDs en vez de `data:` URIs
+     * porque Gmail/Outlook web bloquean estos últimos.
+     *
+     * $attachments: lista opcional de adjuntos descargables. Cada item:
+     * ['data' => binary, 'filename' => string, 'mime' => string].
      */
-    public function send(string $toEmail, string $toName, string $subject, string $htmlBody, ?string $textBody = null): bool
-    {
+    public function send(
+        string $toEmail,
+        string $toName,
+        string $subject,
+        string $htmlBody,
+        ?string $textBody = null,
+        array $embeddedImages = [],
+        array $attachments = [],
+    ): bool {
         if (!$this->isConfigured()) {
             error_log('[MailService] No enviado: SMTP no configurado.');
             return false;
@@ -65,6 +80,24 @@ class MailService
             $mail->setFrom($this->fromAddress, $this->fromName);
             $mail->addAddress($toEmail, $toName);
             $mail->addReplyTo($this->fromAddress, $this->fromName);
+
+            foreach ($embeddedImages as $img) {
+                $mail->addStringEmbeddedImage(
+                    (string) $img['data'],
+                    (string) $img['cid'],
+                    (string) ($img['filename'] ?? 'image.png'),
+                    PHPMailer::ENCODING_BASE64,
+                    (string) ($img['mime'] ?? 'image/png'),
+                );
+            }
+            foreach ($attachments as $att) {
+                $mail->addStringAttachment(
+                    (string) $att['data'],
+                    (string) ($att['filename'] ?? 'attachment'),
+                    PHPMailer::ENCODING_BASE64,
+                    (string) ($att['mime'] ?? 'application/octet-stream'),
+                );
+            }
 
             $mail->Subject = $subject;
             $mail->isHTML(true);
