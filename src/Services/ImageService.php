@@ -134,6 +134,37 @@ final class ImageService
         return $relPath;
     }
 
+    /**
+     * Clona la imagen de una giftcard existente para una nueva (duplicación).
+     * Copia el archivo original a giftcards/{est_id}/{newToken}.{ext} conservando
+     * la extensión. Devuelve el path relativo nuevo, o null si no se pudo copiar.
+     */
+    public function copyGiftcardImage(int $establishmentId, string $sourceRelPath, string $newToken): ?string
+    {
+        $sourceAbs = rtrim($this->uploadsBasePath, '/') . '/' . ltrim($sourceRelPath, '/');
+        if (!is_file($sourceAbs)) {
+            return null;
+        }
+
+        $ext = strtolower((string) pathinfo($sourceRelPath, PATHINFO_EXTENSION));
+        if (!in_array($ext, self::EXT_MAP, true)) {
+            return null;
+        }
+
+        $relDir = 'giftcards/' . $establishmentId;
+        $absDir = rtrim($this->uploadsBasePath, '/') . '/' . $relDir;
+        $this->ensureDir($absDir);
+
+        $relPath = $relDir . '/' . $newToken . '.' . $ext;
+        $absPath = rtrim($this->uploadsBasePath, '/') . '/' . $relPath;
+
+        if (!copy($sourceAbs, $absPath)) {
+            return null;
+        }
+
+        return $relPath;
+    }
+
     public function deleteGiftcardImage(int $establishmentId, string $token): void
     {
         $absDir = rtrim($this->uploadsBasePath, '/') . '/giftcards/' . $establishmentId;

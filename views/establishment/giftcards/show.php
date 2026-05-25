@@ -159,6 +159,10 @@ $jsInitial = json_encode([
                        class="block w-full text-center bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold py-2.5 rounded-lg border border-slate-300 transition">
                         Imprimir tarjeta
                     </a>
+                    <a href="/giftcards/<?= (int) $giftcard['id'] ?>/duplicate"
+                       class="block w-full text-center bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold py-2.5 rounded-lg border border-slate-300 transition">
+                        Duplicar giftcard
+                    </a>
                     <?php if ($isActive): ?>
                         <a href="/giftcards/<?= (int) $giftcard['id'] ?>/edit"
                            class="block w-full text-center bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold py-2.5 rounded-lg border border-slate-300 transition">

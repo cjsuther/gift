@@ -30,10 +30,16 @@ $canManage = $user->isEstablishmentAdmin();
         </template>
     </div>
 
-    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 grid sm:grid-cols-2 gap-3">
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 grid sm:grid-cols-3 gap-3">
         <input type="search" x-model.debounce.300ms="search" @input="resetAndLoad()"
                placeholder="Buscar por título o destinatario…"
                class="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-800 focus:border-transparent outline-none transition">
+        <select x-model="assignment" @change="resetAndLoad()"
+                class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-slate-800 focus:border-transparent outline-none transition">
+            <option value="">Asignadas y sin asignar</option>
+            <option value="unassigned">Sin asignar (sin destinatario)</option>
+            <option value="assigned">Asignadas (con destinatario)</option>
+        </select>
         <select x-model="sort" @change="resetAndLoad()"
                 class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-slate-800 focus:border-transparent outline-none transition">
             <option value="created_desc">Más recientes primero</option>
@@ -99,6 +105,9 @@ $canManage = $user->isEstablishmentAdmin();
                                 <template x-if="canManage">
                                     <a :href="`/api/giftcards/${row.id}/qr`" class="text-slate-700 hover:text-slate-900 text-sm">QR</a>
                                 </template>
+                                <template x-if="canManage">
+                                    <a :href="`/giftcards/${row.id}/duplicate`" class="text-slate-700 hover:text-slate-900 text-sm">Duplicar</a>
+                                </template>
                                 <template x-if="canManage && row.status === 'active'">
                                     <button type="button" @click="cancel(row)"
                                             class="text-red-600 hover:text-red-700 text-sm">Cancelar</button>
@@ -142,6 +151,7 @@ $canManage = $user->isEstablishmentAdmin();
             error: '',
             search: '',
             status: 'active',
+            assignment: '',
             sort: 'created_desc',
             tabs: [
                 { value: 'active',    label: 'Vigentes' },
@@ -176,6 +186,7 @@ $canManage = $user->isEstablishmentAdmin();
                     const qs = new URLSearchParams({ page: this.page, sort: this.sort });
                     if (this.search) qs.set('q', this.search);
                     if (this.status) qs.set('status', this.status);
+                    if (this.assignment) qs.set('assignment', this.assignment);
                     const res = await window.api('/api/giftcards?' + qs.toString());
                     if (!res) return;
                     const data = await res.json();

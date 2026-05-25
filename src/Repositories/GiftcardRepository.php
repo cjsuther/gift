@@ -25,7 +25,7 @@ class GiftcardRepository
     /**
      * Lista paginada y filtrada por tenant.
      *
-     * @param array{q?:string,status?:string,sort?:string,page?:int,per_page?:int} $filters
+     * @param array{q?:string,status?:string,assignment?:string,sort?:string,page?:int,per_page?:int} $filters
      * @return array{items:array<int,array<string,mixed>>, total:int, page:int, per_page:int, total_pages:int, counts:array<string,int>}
      */
     public function listForTenant(int $establishmentId, array $filters = []): array
@@ -434,6 +434,14 @@ class GiftcardRepository
         if (in_array($status, ['active', 'redeemed', 'expired', 'cancelled'], true)) {
             $where[]            = 'g.status = :status';
             $params['status']   = $status;
+        }
+
+        // Asignación: una giftcard está "asignada" si tiene destinatario cargado.
+        $assignment = $filters['assignment'] ?? null;
+        if ($assignment === 'unassigned') {
+            $where[] = "(g.recipient_name IS NULL OR g.recipient_name = '')";
+        } elseif ($assignment === 'assigned') {
+            $where[] = "(g.recipient_name IS NOT NULL AND g.recipient_name <> '')";
         }
 
         if (!empty($filters['q'])) {

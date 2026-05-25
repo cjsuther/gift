@@ -357,6 +357,22 @@ $app->group('', function ($g) use ($view, $giftcardRepo, $qrService, $establishm
             'editing' => $row,
         ]);
     });
+    $g->get('/giftcards/{id}/duplicate', function ($req, $res, $args) use ($view, $giftcardRepo) {
+        $user = $req->getAttribute(AuthMiddleware::REQUEST_ATTR);
+        if (!$user->isEstablishmentAdmin()) {
+            return $res->withHeader('Location', '/giftcards/' . (int) $args['id'])->withStatus(302);
+        }
+        $row = $giftcardRepo->findForTenant((int) $args['id'], (int) $user->establishmentId);
+        if ($row === null) {
+            return $res->withHeader('Location', '/giftcards')->withStatus(302);
+        }
+        return $view->withLayout($res, 'establishment/giftcards/form', 'layouts/admin', [
+            'user'        => $user,
+            'title'       => 'Duplicar giftcard',
+            'editing'     => null,
+            'duplicating' => $row,
+        ]);
+    });
 })
     ->add($tenant)
     ->add(new RoleMiddleware('establishment_admin', 'establishment_user'))

@@ -43,9 +43,10 @@ final class GiftcardController
         $q      = $request->getQueryParams();
 
         $page = $this->repo->listForTenant($tenant, [
-            'q'        => $q['q']        ?? null,
-            'status'   => $q['status']   ?? null,
-            'sort'     => $q['sort']     ?? null,
+            'q'          => $q['q']          ?? null,
+            'status'     => $q['status']     ?? null,
+            'assignment' => $q['assignment'] ?? null,
+            'sort'       => $q['sort']       ?? null,
             'page'     => isset($q['page'])     ? (int) $q['page']     : 1,
             'per_page' => isset($q['per_page']) ? (int) $q['per_page'] : null,
         ]);
@@ -91,6 +92,18 @@ final class GiftcardController
 
         $imageFile  = $this->extractUpload($request, 'image');
         $imageSaver = $this->imageSaverFor($imageFile, $tenant);
+
+        // Duplicación: si no subieron una imagen nueva pero piden copiar la de
+        // otra giftcard del mismo establecimiento, clonamos el archivo original.
+        if ($imageSaver === null) {
+            $copyFrom = $this->nullable($data['copy_image_from'] ?? null);
+            if ($copyFrom !== null && ctype_digit($copyFrom)) {
+                $source = $this->repo->findForTenant((int) $copyFrom, $tenant);
+                if ($source !== null && !empty($source['image_path'])) {
+                    $imageSaver = $this->imageCopierFor((string) $source['image_path'], $tenant);
+                }
+            }
+        }
 
         try {
             $id = $this->repo->create($tenant, $user->id, $token, [
@@ -361,6 +374,14 @@ final class GiftcardController
             return null;
         }
         return fn (string $token) => $this->images->saveGiftcardImage($file, $establishmentId, $token);
+    }
+
+    private function imageCopierFor(string $sourceImagePath, int $establishmentId): ?\Closure
+    {
+        if ($this->images === null) {
+            return null;
+        }
+        return fn (string $token) => $this->images->copyGiftcardImage($establishmentId, $sourceImagePath, $token);
     }
 
     private function nullable(mixed $value): ?string

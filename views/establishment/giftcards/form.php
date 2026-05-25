@@ -1,25 +1,34 @@
 <?php
 /** @var \App\Auth\AuthenticatedUser $user */
 /** @var array|null $editing */
+/** @var array|null $duplicating */
 $isEdit = isset($editing) && $editing !== null;
+$dup    = isset($duplicating) && $duplicating !== null;
+// En duplicación copiamos sólo título, descripción e imagen; el destinatario y
+// el resto quedan vacíos porque la nueva giftcard suele ser para otra persona.
 $jsInitial = json_encode([
     'isEdit'            => $isEdit,
-    'id'                => $isEdit ? (int) $editing['id']   : null,
-    'title'             => $isEdit ? (string) $editing['title'] : '',
-    'description'       => $isEdit ? (string) ($editing['description'] ?? '') : '',
+    'isDuplicate'       => $dup,
+    'id'                => $isEdit ? (int) $editing['id'] : null,
+    'copyImageFrom'     => $dup ? (int) $duplicating['id'] : null,
+    'title'             => $isEdit ? (string) $editing['title'] : ($dup ? (string) $duplicating['title'] : ''),
+    'description'       => $isEdit ? (string) ($editing['description'] ?? '') : ($dup ? (string) ($duplicating['description'] ?? '') : ''),
     'recipient_name'    => $isEdit ? (string) ($editing['recipient_name'] ?? '') : '',
     'recipient_contact' => $isEdit ? (string) ($editing['recipient_contact'] ?? '') : '',
     'sender_name'       => $isEdit ? (string) ($editing['sender_name'] ?? '') : '',
     'sender_email'      => $isEdit ? (string) ($editing['sender_email'] ?? '') : '',
     'expires_at'        => $isEdit ? (string) ($editing['expires_at'] ?? '') : '',
-    'image_path'        => $isEdit ? ($editing['image_path'] ?? null) : null,
+    'image_path'        => $isEdit ? ($editing['image_path'] ?? null) : ($dup ? ($duplicating['image_path'] ?? null) : null),
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 ?>
 <div x-data='giftcardForm(<?= $jsInitial ?>)' class="max-w-2xl mx-auto space-y-6">
     <div>
         <a href="/giftcards" class="text-sm text-slate-500 hover:text-slate-700">← Volver al listado</a>
         <h1 class="text-2xl font-bold text-slate-800 mt-2"
-            x-text="isEdit ? 'Editar giftcard' : 'Nueva giftcard'"></h1>
+            x-text="isEdit ? 'Editar giftcard' : (isDuplicate ? 'Duplicar giftcard' : 'Nueva giftcard')"></h1>
+        <p x-show="isDuplicate" x-cloak class="text-sm text-slate-500 mt-1">
+            Copiamos título, descripción e imagen de la giftcard original. Ajustá lo que necesites y creá una nueva.
+        </p>
     </div>
 
     <form @submit.prevent="submit" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
@@ -44,6 +53,9 @@ $jsInitial = json_encode([
             <template x-if="imagePreview">
                 <img :src="imagePreview" alt="Preview" class="mt-3 max-h-48 rounded-lg object-cover border border-slate-200">
             </template>
+            <p x-show="isDuplicate && !imageFile && imagePreview" x-cloak class="text-xs text-slate-500 mt-2">
+                Se reutilizará esta imagen. Subí un archivo si querés reemplazarla.
+            </p>
         </div>
 
         <div class="grid sm:grid-cols-2 gap-4">
@@ -113,7 +125,9 @@ $jsInitial = json_encode([
     function giftcardForm(initial) {
         return {
             isEdit: !!initial.isEdit,
+            isDuplicate: !!initial.isDuplicate,
             id: initial.id,
+            copyImageFrom: initial.copyImageFrom,
             form: {
                 title: initial.title || '',
                 description: initial.description || '',
@@ -145,7 +159,12 @@ $jsInitial = json_encode([
                     for (const [k, v] of Object.entries(this.form)) {
                         if (v !== '' && v !== null && v !== undefined) fd.append(k, v);
                     }
-                    if (this.imageFile) fd.append('image', this.imageFile);
+                    if (this.imageFile) {
+                        fd.append('image', this.imageFile);
+                    } else if (this.isDuplicate && this.copyImageFrom) {
+                        // Sin archivo nuevo: pedimos al backend clonar la imagen original.
+                        fd.append('copy_image_from', this.copyImageFrom);
+                    }
 
                     const url = this.isEdit ? '/api/giftcards/' + this.id : '/api/giftcards';
                     const res = await window.api(url, { method: 'POST', body: fd });
